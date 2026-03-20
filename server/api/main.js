@@ -1,15 +1,3 @@
-// api/main.js
-// Express REST API
-//
-// Endpoints:
-//   POST /query     — ask a question, get an answer + sources
-//   GET  /search    — raw semantic search (no LLM)
-//   POST /ingest    — trigger ingestion (pass optional { urls: [] })
-//   GET  /stats     — DB statistics
-//   GET  /health    — liveness check
-//   GET  /sources   — list all indexed sources
-//   GET  /documents — list all indexed documents
-
 import "dotenv/config";
 import express from "express";
 import { ask } from "../llm/prompt.js";
@@ -24,21 +12,12 @@ const PORT = process.env.PORT ?? 3001;
 const FRONTEND_URL = process.env.FRONTEND_URL;
 app.use(express.json());
 
-// ─── CORS ─────────────────────────────────────────────────────────────────────
 app.use(cors({
   origin: ['http://localhost:5173', FRONTEND_URL],
   allowedHeaders: ['Content-Type', 'Authorization'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 }));
 
-// ─── routes ───────────────────────────────────────────────────────────────────
-
-/**
- * POST /query
- * Body: { question: string, topK?: number, stream?: boolean }
- *
- * Streaming response: set stream=true and consume text/event-stream
- */
 app.post("/query", async (req, res) => {
   const { question, topK = 5, stream = false, source_id, docId } = req.body;
   console.log("[/query] Received:", { question, topK, stream, source_id, docId });
@@ -91,10 +70,6 @@ app.post("/query", async (req, res) => {
   }
 });
 
-/**
- * GET /search?q=useRef&topK=5
- * Returns raw chunks without LLM synthesis.
- */
 app.get("/search", async (req, res) => {
   const { q, topK = 5, threshold = 0.65 } = req.query;
   if (!q) return res.status(400).json({ error: "q param required" });
@@ -111,11 +86,6 @@ app.get("/search", async (req, res) => {
   }
 });
 
-/**
- * POST /ingest
- * Body: { urls?: string[] }
- * Triggers the ingestion pipeline.
- */
 app.post("/ingest", async (req, res) => {
   const { urls } = req.body ?? {};
   try {
@@ -138,10 +108,6 @@ app.get("/stats", async (_req, res) => {
   }
 });
 
-/**
- * GET /sources
- * Returns all indexed sources (id, name, base_url).
- */
 app.get("/sources", async (_req, res) => {
   try {
     const pool = getPool();
@@ -153,10 +119,6 @@ app.get("/sources", async (_req, res) => {
   }
 });
 
-/**
- * GET /documents
- * Returns all indexed documents (id, title, url, source_id).
- */
 app.get("/documents", async (_req, res) => {
   try {
     const pool = getPool();
@@ -175,8 +137,6 @@ app.get("/documents", async (_req, res) => {
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
-
-// ─── start ────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
   console.log(`\n🚀 RAG API running at http://localhost:${PORT}`);

@@ -3,11 +3,10 @@ import { sendQueryStream, ingestUrl, queryDocuments, querySources, fetchStats } 
 import './App.css'
 import MarkdownRenderer from './MarkdownRenderer'
 
-// ── Accordion for Sources ────────────────────────────────────────────────────
 function SourceAccordion({ sources }) {
-  const [isOpen, setIsOpen] = useState(true) // Open by default for better visibility
+  const [isOpen, setIsOpen] = useState(true)
 
-  console.log("[SourceAccordion] Rendering with sources:", sources)
+  // console.log("[SourceAccordion] Rendering with sources:", sources)
 
   if (!sources || sources.length === 0) return null
 
@@ -48,7 +47,6 @@ function SourceAccordion({ sources }) {
   )
 }
 
-// ── Message bubble component ─────────────────────────────────────────────────
 function Message({ msg }) {
   const isUser = msg.role === 'user'
   const isStreaming = msg.role === 'assistant' && msg.streaming
@@ -68,7 +66,6 @@ function Message({ msg }) {
   )
 }
 
-// ── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   // chat state
   const [messages, setMessages] = useState([
@@ -97,7 +94,6 @@ export default function App() {
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
 
-  // ── resizing logic ──────────────────────────────────────────────────────────
   const startResizingLeft = useCallback((e) => {
     e.preventDefault()
     setIsResizingLeft(true)
@@ -128,7 +124,6 @@ export default function App() {
     }
   }, [isResizingLeft, resize, stopResizing])
 
-  // ── load sources, docs, stats on mount ─────────────────────────────────────
   useEffect(() => {
     Promise.all([queryDocuments(), querySources(), fetchStats()])
       .then(([d, s, st]) => {
@@ -144,12 +139,10 @@ export default function App() {
       .catch(() => {/* server may not have data yet, ok */ })
   }, [])
 
-  // ── auto-scroll to bottom ───────────────────────────────────────────────────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // ── send query ──────────────────────────────────────────────────────────────
   const handleSend = useCallback(async () => {
     const q = input.trim()
     if (!q || loading) return
@@ -200,7 +193,6 @@ export default function App() {
     }
   }
 
-  // ── embed URL ───────────────────────────────────────────────────────────────
   const handleEmbed = async () => {
     const url = embedUrl.trim()
     if (!url) return
@@ -229,14 +221,11 @@ export default function App() {
     setTimeout(() => setEmbedStatus(null), 5000)
   }
 
-  // ── dropdown options ────────────────────────────────────────────────────────
   const hasScope = sources.length > 0
   const activeScopeName = sources.find(s => s.id === sourceScope)?.name ?? null
 
-  // ── render ──────────────────────────────────────────────────────────────────
   return (
     <div className={`layout ${isResizingLeft ? 'layout--resizing' : ''}`}>
-      {/* ── Left Sidebar ── */}
       <aside
         className={`sidebar sidebar--left ${sidebarOpen ? 'sidebar--open' : 'sidebar--closed'}`}
         style={{ width: sidebarOpen ? `${sidebarWidth}px` : undefined }}
@@ -250,7 +239,6 @@ export default function App() {
 
         {sidebarOpen && (
           <div className="sidebar__content">
-            {/* Stats badge */}
             {stats && (
               <div className="stats-card">
                 <div className="stats-card__item">
@@ -270,7 +258,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Ingestion Panel */}
             <div className="panel">
               <h2 className="panel__title">
                 <span className="panel__icon">SOURCE</span>
@@ -305,7 +292,6 @@ export default function App() {
               )}
             </div>
 
-            {/* Knowledge Panel (Moved from right) */}
             {sources.length > 0 && (
               <div className="panel panel--docs">
                 <h2 className="panel__title">
@@ -330,7 +316,6 @@ export default function App() {
         )}
       </aside>
 
-      {/* Left Resize Handle */}
       {sidebarOpen && (
         <div
           className={`resize-handle resize-handle--left ${isResizingLeft ? 'resize-handle--active' : ''}`}
@@ -338,9 +323,7 @@ export default function App() {
         />
       )}
 
-      {/* ── Chat Panel ── */}
       <main className="chat">
-        {/* Chat header */}
         <header className="chat__header">
           <div className="chat__title">
             <h1>Ask your docs</h1>
@@ -351,7 +334,6 @@ export default function App() {
             )}
           </div>
 
-          {/* Source scope dropdown — fetched from /sources, no "All" option */}
           {sources.length > 0 && (
             <div className="scope-select-wrap">
               <label htmlFor="source-scope" className="scope-select-wrap__label">Source</label>
@@ -369,13 +351,11 @@ export default function App() {
           )}
         </header>
 
-        {/* Messages */}
         <div className="chat__messages" role="log" aria-live="polite">
           {messages.map(msg => <Message key={msg.id} msg={msg} />)}
           <div ref={bottomRef} />
         </div>
 
-        {/* Input bar */}
         <div className="chat__inputbar">
           <textarea
             id="chat-input"

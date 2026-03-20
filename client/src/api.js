@@ -1,30 +1,23 @@
-// client/src/api.js
-// Thin wrappers around the DocGPT Express API (localhost:3001)
-
 const BASE = import.meta.env.VITE_BACKEND_URL || "https://docgpt-gyo9.onrender.com";
 
-// ── list sources ──────────────────────────────────────────────────────────────
 export async function querySources() {
   const res = await fetch(`${BASE}/sources`);
   if (!res.ok) throw new Error(`[/sources] ${res.status}`);
-  return res.json(); // [{ id, name, base_url }]
+  return res.json();
 }
 
-// ── list documents ────────────────────────────────────────────────────────────
 export async function queryDocuments() {
   const res = await fetch(`${BASE}/documents`);
   if (!res.ok) throw new Error(`[/documents] ${res.status}`);
-  return res.json(); // [{ id, title, url, source_id }]
+  return res.json();
 }
 
-// ── DB stats ──────────────────────────────────────────────────────────────────
 export async function fetchStats() {
   const res = await fetch(`${BASE}/stats`);
   if (!res.ok) throw new Error(`[/stats] ${res.status}`);
-  return res.json(); // { sources, documents, chunks }
+  return res.json();
 }
 
-// ── chat query (streaming SSE) ────────────────────────────────────────────────
 /**
  * Send a question to the server and stream back tokens.
  *
@@ -37,7 +30,7 @@ export async function fetchStats() {
  * @param {Function} opts.onDone       – called with { sources, chunk_count } when stream ends
  */
 export async function sendQueryStream(question, { topK = 5, source_id, docId, onToken, onDone } = {}) {
-  console.log("[sendQueryStream] Sending request:", { question, topK, source_id, docId });
+  // console.log("[sendQueryStream] Sending request:", { question, topK, source_id, docId });
 
   const res = await fetch(`${BASE}/query`, {
     method: "POST",
@@ -45,7 +38,7 @@ export async function sendQueryStream(question, { topK = 5, source_id, docId, on
     body: JSON.stringify({ question, topK, stream: true, source_id, docId }),
   });
 
-  console.log("[sendQueryStream] Response status:", res.status, res.statusText);
+  // console.log("[sendQueryStream] Response status:", res.status, res.statusText);
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
@@ -60,7 +53,7 @@ export async function sendQueryStream(question, { topK = 5, source_id, docId, on
   while (true) {
     const { done, value } = await reader.read();
     if (done) {
-      console.log("[sendQueryStream] Stream done.");
+      // console.log("[sendQueryStream] Stream done.");
       break;
     }
     buf += decoder.decode(value, { stream: true });
@@ -70,12 +63,12 @@ export async function sendQueryStream(question, { topK = 5, source_id, docId, on
 
     for (const line of lines) {
       if (!line.startsWith("data: ")) continue;
-      console.log("[sendQueryStream] SSE line:", line);
+      // console.log("[sendQueryStream] SSE line:", line);
       try {
         const payload = JSON.parse(line.slice(6));
         if (payload.token !== undefined) onToken?.(payload.token);
         if (payload.done) {
-          console.log("[sendQueryStream] Stream complete. Sources:", payload.sources);
+          // console.log("[sendQueryStream] Stream complete. Sources:", payload.sources);
           onDone?.(payload);
         }
       } catch (parseErr) {
@@ -85,7 +78,6 @@ export async function sendQueryStream(question, { topK = 5, source_id, docId, on
   }
 }
 
-// ── ingest URL ────────────────────────────────────────────────────────────────
 export async function ingestUrl(url) {
   const res = await fetch(`${BASE}/ingest`, {
     method: "POST",
@@ -96,5 +88,5 @@ export async function ingestUrl(url) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error ?? "Ingest failed");
   }
-  return res.json(); // { message: "Ingestion started" }
+  return res.json();
 }

@@ -1,11 +1,8 @@
-const MODEL     = "BAAI/bge-small-en-v1.5";
+const MODEL = "BAAI/bge-small-en-v1.5";
 const BATCH_SIZE = 32;
-const MAX_RETRY  = 3;
+const MAX_RETRY = 3;
 
-// New HF router endpoint (api-inference.huggingface.co is no longer supported)
 const HF_ENDPOINT = `https://router.huggingface.co/hf-inference/models/${MODEL}/pipeline/feature-extraction`;
-
-// ─── retry helper ────────────────────────────────────────────────────────────
 
 async function withRetry(fn, retries = MAX_RETRY) {
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -23,8 +20,6 @@ async function withRetry(fn, retries = MAX_RETRY) {
     }
   }
 }
-
-// ─── batch embed ──────────────────────────────────────────────────────────────
 
 async function embedBatch(texts) {
   const token = process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY;
@@ -54,8 +49,6 @@ async function embedBatch(texts) {
   });
 }
 
-// ─── public API ───────────────────────────────────────────────────────────────
-
 /**
  * Embed a single string.
  * @param {string} text
@@ -82,7 +75,7 @@ export async function embedChunks(chunks) {
   for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
     const batch = chunks.slice(i, i + BATCH_SIZE);
     const texts = batch.map((c) => c.content);
-    const vecs  = await embedBatch(texts);
+    const vecs = await embedBatch(texts);
 
     batch.forEach((chunk, j) => {
       chunk.embedding = vecs[j];

@@ -1,30 +1,15 @@
-// llm/prompt.js
-// Builds prompts and calls the LLM to answer questions
-// given retrieved context chunks.
-
 import OpenAI from "openai";
 
-const LLM_MODEL = "llama-3.3-70b-versatile"; // High-performance Llama model on Groq
+const LLM_MODEL = "llama-3.3-70b-versatile";
 const MAX_CONTEXT = 3000;
 
-// ─── prompt template ─────────────────────────────────────────────────────────
-
-/**
- * Build the system + user messages for the RAG QA prompt.
- *
- * @param {string}         question
- * @param {SearchResult[]} chunks    Retrieved context
- * @returns {{ system: string, user: string }}
- */
 function buildPrompt(question, chunks) {
-  // Format each chunk with its source URL for attribution
   const contextParts = chunks.map((c, i) => {
     const header = c.heading ? `### ${c.heading}` : `### Passage ${i + 1}`;
     const source = `Source: ${c.url}`;
     return `${header}\n${source}\n\n${c.content}`;
   });
 
-  // Trim context to stay within token budget
   let context = contextParts.join("\n\n---\n\n");
   if (context.length > MAX_CONTEXT * 4) {
     context = context.slice(0, MAX_CONTEXT * 4) + "\n\n[context truncated]";
@@ -48,18 +33,6 @@ Answer clearly and concisely. Include code examples if the context contains them
   return { system, user };
 }
 
-// ─── streaming answer ─────────────────────────────────────────────────────────
-
-/**
- * Generate an answer for the question using retrieved chunks.
- * Supports streaming via an optional `onToken` callback.
- *
- * @param {string}         question
- * @param {SearchResult[]} chunks
- * @param {Object}         opts
- * @param {Function}       [opts.onToken]   Called with each streaming token
- * @returns {Promise<{ answer: string, sources: string[] }>}
- */
 export async function generateAnswer(question, chunks, { onToken } = {}) {
   if (!chunks.length) {
     return {
@@ -82,7 +55,6 @@ export async function generateAnswer(question, chunks, { onToken } = {}) {
   const sources = Array.from(sourcesMap.values());
 
   if (onToken) {
-    // Streaming mode
     const stream = await client.chat.completions.create({
       model: LLM_MODEL,
       messages: [
@@ -100,7 +72,6 @@ export async function generateAnswer(question, chunks, { onToken } = {}) {
     }
     return { answer, sources };
   } else {
-    // Non-streaming
     const res = await client.chat.completions.create({
       model: LLM_MODEL,
       temperature: 0.2,
@@ -114,25 +85,12 @@ export async function generateAnswer(question, chunks, { onToken } = {}) {
   }
 }
 
-// ─── query pipeline (search + answer) ────────────────────────────────────────
-
 import { search } from "../retrieval/search.js";
 import { rerank } from "../retrieval/rerank.js";
 
-/**
- * Full pipeline: question → search → rerank → LLM → answer
- *
- * @param {string}  question
- * @param {Object}  opts
- * @param {number}  [opts.topK=5]
- * @param {number}  [opts.threshold=0.65]
- * @param {Function} [opts.onToken]   For streaming responses
- * @returns {Promise<{ answer, sources, chunks }>}
- */
 export async function ask(question, opts = {}) {
   console.log("[ask] Question:", question, "| Opts:", { topK: opts.topK, source_id: opts.source_id, docId: opts.docId });
 
-  // 1. Embed + search
   const rawChunks = await search(question, {
     topK: (opts.topK ?? 5) * 2, // fetch extra for reranker
     threshold: opts.threshold ?? 0.60,
@@ -141,7 +99,6 @@ export async function ask(question, opts = {}) {
   });
   console.log("[ask] Raw search results:", rawChunks.length, rawChunks.map(c => ({ score: c.score, url: c.url })));
 
-  // 2. Optional rerank
   const ranked = await rerank(question, rawChunks);
   const chunks = ranked.slice(0, opts.topK ?? 5);
   console.log("[ask] Chunks after rerank:", chunks.length);
@@ -150,8 +107,6 @@ export async function ask(question, opts = {}) {
     console.warn("[ask] No chunks found — LLM will respond with fallback message");
   }
 
-  // 3. Generate
-  console.log("[ask] Calling LLM with", chunks.length, "chunks...");
   const { answer, sources } = await generateAnswer(question, chunks, {
     onToken: opts.onToken,
   });
