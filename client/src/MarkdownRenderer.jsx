@@ -38,7 +38,7 @@ const CodeBlock = ({ node, className, children, ...props }) => {
     <div className="code-block-container">
       <div className="code-block-header">
         <span className="code-block-lang">{match ? match[1] : 'text'}</span>
-        <button className="code-block-copy" onClick={handleCopy}>
+        <button className="code-block-copy" style={{ background: "transparent", border: "none", color: "gray" }} onClick={handleCopy}>
           {copied ? (
             <span className="copy-success">✓ Copied!</span>
           ) : (

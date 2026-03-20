@@ -90,14 +90,9 @@ export default function App() {
   // stats
   const [stats, setStats] = useState(null)
 
-  // sidebar states
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState(280)
   const [isResizingLeft, setIsResizingLeft] = useState(false)
-
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
-  const [rightSidebarWidth, setRightSidebarWidth] = useState(280)
-  const [isResizingRight, setIsResizingRight] = useState(false)
 
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
@@ -108,28 +103,19 @@ export default function App() {
     setIsResizingLeft(true)
   }, [])
 
-  const startResizingRight = useCallback((e) => {
-    e.preventDefault()
-    setIsResizingRight(true)
-  }, [])
-
   const stopResizing = useCallback(() => {
     setIsResizingLeft(false)
-    setIsResizingRight(false)
   }, [])
 
   const resize = useCallback((e) => {
     if (isResizingLeft) {
       const newWidth = e.clientX
       if (newWidth > 150 && newWidth < 500) setSidebarWidth(newWidth)
-    } else if (isResizingRight) {
-      const newWidth = window.innerWidth - e.clientX
-      if (newWidth > 150 && newWidth < 500) setRightSidebarWidth(newWidth)
     }
-  }, [isResizingLeft, isResizingRight])
+  }, [isResizingLeft])
 
   useEffect(() => {
-    if (isResizingLeft || isResizingRight) {
+    if (isResizingLeft) {
       window.addEventListener('mousemove', resize)
       window.addEventListener('mouseup', stopResizing)
     } else {
@@ -140,7 +126,7 @@ export default function App() {
       window.removeEventListener('mousemove', resize)
       window.removeEventListener('mouseup', stopResizing)
     }
-  }, [isResizingLeft, isResizingRight, resize, stopResizing])
+  }, [isResizingLeft, resize, stopResizing])
 
   // ── load sources, docs, stats on mount ─────────────────────────────────────
   useEffect(() => {
@@ -249,7 +235,7 @@ export default function App() {
 
   // ── render ──────────────────────────────────────────────────────────────────
   return (
-    <div className={`layout ${isResizingLeft || isResizingRight ? 'layout--resizing' : ''}`}>
+    <div className={`layout ${isResizingLeft ? 'layout--resizing' : ''}`}>
       {/* ── Left Sidebar ── */}
       <aside
         className={`sidebar sidebar--left ${sidebarOpen ? 'sidebar--open' : 'sidebar--closed'}`}
@@ -260,9 +246,6 @@ export default function App() {
             <span className="logo__icon">{'>_'}</span>
             <span className="logo__text">DOCGPT</span>
           </div>
-          <button className="sidebar__toggle" onClick={() => setSidebarOpen(o => !o)} aria-label="Toggle left sidebar">
-            {sidebarOpen ? '←' : '→'}
-          </button>
         </div>
 
         {sidebarOpen && (
@@ -322,7 +305,27 @@ export default function App() {
               )}
             </div>
 
-
+            {/* Knowledge Panel (Moved from right) */}
+            {sources.length > 0 && (
+              <div className="panel panel--docs">
+                <h2 className="panel__title">
+                  <span className="panel__icon">📚</span>
+                  KNOWLEDGE
+                </h2>
+                <ul className="doc-list">
+                  {sources.map(s => (
+                    <li
+                      key={s.id}
+                      className={`doc-list__item ${sourceScope === s.id ? 'doc-list__item--active' : ''}`}
+                      onClick={() => setSourceScope(s.id)}
+                    >
+                      <span className="doc-list__dot" />
+                      <span className="doc-list__title">{s.name || s.base_url}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
       </aside>
@@ -400,61 +403,6 @@ export default function App() {
           </button>
         </div>
       </main>
-
-      {/* Right Resize Handle */}
-      {rightSidebarOpen && (
-        <div
-          className={`resize-handle resize-handle--right ${isResizingRight ? 'resize-handle--active' : ''}`}
-          onMouseDown={startResizingRight}
-        />
-      )}
-
-      {/* ── Right Sidebar ── */}
-      <aside
-        className={`sidebar sidebar--right ${rightSidebarOpen ? 'sidebar--open' : 'sidebar--closed'}`}
-        style={{ width: rightSidebarOpen ? `${rightSidebarWidth}px` : undefined }}
-      >
-        <div className="sidebar__header">
-          <button className="sidebar__toggle" onClick={() => setRightSidebarOpen(o => !o)} aria-label="Toggle right sidebar">
-            {rightSidebarOpen ? '→' : '←'}
-          </button>
-          <div className="sidebar__title">KNOWLEDGE</div>
-        </div>
-
-        {rightSidebarOpen && (
-          <div className="sidebar__content">
-            {/* Sources list */}
-            {sources.length > 0 && (
-              <div className="panel panel--docs">
-                <h2 className="panel__title">
-                  <span className="panel__icon">📚</span>
-                  Indexed Sources
-                </h2>
-                <ul className="doc-list">
-                  {sources.map(s => (
-                    <li
-                      key={s.id}
-                      className={`doc-list__item ${sourceScope === s.id ? 'doc-list__item--active' : ''}`}
-                      onClick={() => setSourceScope(s.id)}
-                    >
-                      <span className="doc-list__dot" />
-                      <span className="doc-list__title">{s.name || s.base_url}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="panel">
-              <h2 className="panel__title">
-                <span className="panel__icon">ℹ️</span>
-                Context Details
-              </h2>
-              <p className="panel__desc">Select a source to view more details.</p>
-            </div>
-          </div>
-        )}
-      </aside>
     </div>
   )
 }
