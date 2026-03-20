@@ -3,6 +3,50 @@ import { sendQueryStream, ingestUrl, queryDocuments, querySources, fetchStats } 
 import './App.css'
 import MarkdownRenderer from './MarkdownRenderer'
 
+// ── Accordion for Sources ────────────────────────────────────────────────────
+function SourceAccordion({ sources }) {
+  const [isOpen, setIsOpen] = useState(true) // Open by default for better visibility
+
+  console.log("[SourceAccordion] Rendering with sources:", sources)
+
+  if (!sources || sources.length === 0) return null
+
+  return (
+    <div className="source-accordion">
+      <button
+        className={`source-accordion__btn ${isOpen ? 'source-accordion__btn--open' : ''}`}
+        onClick={() => setIsOpen(!isOpen)}
+        aria-expanded={isOpen}
+      >
+        <span className="source-accordion__label">Sources ({sources.length})</span>
+        <span className="source-accordion__icon">{isOpen ? '−' : '+'}</span>
+      </button>
+
+      {isOpen && (
+        <div className="source-accordion__list">
+          {sources.map((s, i) => {
+            const url = typeof s === 'string' ? s : (s?.url || '')
+            const title = typeof s === 'string' ? s : (s?.title || s?.url || 'Untitled Source')
+
+            if (!url && !title) return null;
+
+            return (
+              <div key={i} className="source-accordion__item">
+                <div className="source-accordion__item-header">
+                  <span className="source-accordion__item-title">{title}</span>
+                </div>
+                <a href={url} target="_blank" rel="noopener noreferrer" className="source-accordion__item-link">
+                  {url || 'View Source'}
+                </a>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Message bubble component ─────────────────────────────────────────────────
 function Message({ msg }) {
   const isUser = msg.role === 'user'
@@ -10,20 +54,13 @@ function Message({ msg }) {
 
   return (
     <div className={`msg ${isUser ? 'msg--user' : 'msg--ai'}`}>
-      <div className="msg__avatar">{isUser ? 'U' : '✦'}</div>
+      <div className="msg__avatar">{isUser ? 'U' : 'AI'}</div>
       <div className="msg__body">
         <div className={`msg__bubble ${isStreaming ? 'msg__bubble--streaming' : ''}`}>
           <MarkdownRenderer content={msg.content || ''} />
         </div>
-        {msg.sources?.length > 0 && (
-          <div className="msg__sources">
-            <span className="msg__sources-label">Sources</span>
-            {msg.sources.map((s, i) => (
-              <a key={i} href={s} target="_blank" rel="noopener noreferrer" className="msg__source-link">
-                {(() => { try { return new URL(s).hostname } catch { return s } })()}
-              </a>
-            ))}
-          </div>
+        {!isUser && msg.sources?.length > 0 && (
+          <SourceAccordion sources={msg.sources} />
         )}
       </div>
     </div>
@@ -34,7 +71,7 @@ function Message({ msg }) {
 export default function App() {
   // chat state
   const [messages, setMessages] = useState([
-    { id: 'welcome', role: 'assistant', content: 'Hello! Ask me anything about your embedded documents. Use the dropdown to scope your search to a specific source.' }
+    { id: 'welcome', role: 'assistant', content: '### Welcome to DOCGPT\nI am ready to analyze your sources. Scope your query below to begin.' }
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -52,11 +89,57 @@ export default function App() {
   // stats
   const [stats, setStats] = useState(null)
 
-  // sidebar collapsed on mobile
+  // sidebar states
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarWidth, setSidebarWidth] = useState(280)
+  const [isResizingLeft, setIsResizingLeft] = useState(false)
+
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(280)
+  const [isResizingRight, setIsResizingRight] = useState(false)
 
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
+
+  // ── resizing logic ──────────────────────────────────────────────────────────
+  const startResizingLeft = useCallback((e) => {
+    e.preventDefault()
+    setIsResizingLeft(true)
+  }, [])
+
+  const startResizingRight = useCallback((e) => {
+    e.preventDefault()
+    setIsResizingRight(true)
+  }, [])
+
+  const stopResizing = useCallback(() => {
+    setIsResizingLeft(false)
+    setIsResizingRight(false)
+  }, [])
+
+  const resize = useCallback((e) => {
+    if (isResizingLeft) {
+      const newWidth = e.clientX
+      if (newWidth > 150 && newWidth < 500) setSidebarWidth(newWidth)
+    } else if (isResizingRight) {
+      const newWidth = window.innerWidth - e.clientX
+      if (newWidth > 150 && newWidth < 500) setRightSidebarWidth(newWidth)
+    }
+  }, [isResizingLeft, isResizingRight])
+
+  useEffect(() => {
+    if (isResizingLeft || isResizingRight) {
+      window.addEventListener('mousemove', resize)
+      window.addEventListener('mouseup', stopResizing)
+    } else {
+      window.removeEventListener('mousemove', resize)
+      window.removeEventListener('mouseup', stopResizing)
+    }
+    return () => {
+      window.removeEventListener('mousemove', resize)
+      window.removeEventListener('mouseup', stopResizing)
+    }
+  }, [isResizingLeft, isResizingRight, resize, stopResizing])
 
   // ── load sources, docs, stats on mount ─────────────────────────────────────
   useEffect(() => {
@@ -165,21 +248,24 @@ export default function App() {
 
   // ── render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="layout">
-      {/* ── Sidebar ── */}
-      <aside className={`sidebar ${sidebarOpen ? 'sidebar--open' : 'sidebar--closed'}`}>
+    <div className={`layout ${isResizingLeft || isResizingRight ? 'layout--resizing' : ''}`}>
+      {/* ── Left Sidebar ── */}
+      <aside
+        className={`sidebar sidebar--left ${sidebarOpen ? 'sidebar--open' : 'sidebar--closed'}`}
+        style={{ width: sidebarOpen ? `${sidebarWidth}px` : undefined }}
+      >
         <div className="sidebar__header">
           <div className="logo">
-            <span className="logo__icon">✦</span>
-            <span className="logo__text">DocGPT</span>
+            <span className="logo__icon">{'>_'}</span>
+            <span className="logo__text">DOCGPT</span>
           </div>
-          <button className="sidebar__toggle" onClick={() => setSidebarOpen(o => !o)} aria-label="Toggle sidebar">
+          <button className="sidebar__toggle" onClick={() => setSidebarOpen(o => !o)} aria-label="Toggle left sidebar">
             {sidebarOpen ? '←' : '→'}
           </button>
         </div>
 
         {sidebarOpen && (
-          <>
+          <div className="sidebar__content">
             {/* Stats badge */}
             {stats && (
               <div className="stats-card">
@@ -200,20 +286,20 @@ export default function App() {
               </div>
             )}
 
-            {/* Embed Panel */}
+            {/* Ingestion Panel */}
             <div className="panel">
               <h2 className="panel__title">
-                <span className="panel__icon">⊕</span>
-                Embed a Document
+                <span className="panel__icon">SOURCE</span>
+                INGESTION
               </h2>
-              <p className="panel__desc">Paste a URL to ingest and embed into your vector DB.</p>
+              <p className="panel__desc">Paste a URL to index.</p>
 
               <div className="embed-form">
                 <input
                   id="embed-url-input"
                   className="input"
                   type="url"
-                  placeholder="https://example.com/docs"
+                  placeholder="https://..."
                   value={embedUrl}
                   onChange={e => setEmbedUrl(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleEmbed()}
@@ -224,43 +310,29 @@ export default function App() {
                   onClick={handleEmbed}
                   disabled={embedStatus === 'loading'}
                 >
-                  {embedStatus === 'loading' ? (
-                    <span className="spinner" />
-                  ) : 'Embed'}
+                  {embedStatus === 'loading' ? <span className="spinner" /> : 'Index'}
                 </button>
               </div>
 
               {embedStatus && embedStatus !== 'loading' && (
                 <div className={`toast toast--${embedStatus}`}>
-                  {embedStatus === 'ok' ? '✓' : '✕'} {embedMsg}
+                  {embedMsg}
                 </div>
               )}
             </div>
 
-            {/* Sources list */}
-            {sources.length > 0 && (
-              <div className="panel panel--docs">
-                <h2 className="panel__title">
-                  <span className="panel__icon">📚</span>
-                  Indexed Sources
-                </h2>
-                <ul className="doc-list">
-                  {sources.map(s => (
-                    <li
-                      key={s.id}
-                      className={`doc-list__item ${sourceScope === s.id ? 'doc-list__item--active' : ''}`}
-                      onClick={() => setSourceScope(s.id)}
-                    >
-                      <span className="doc-list__dot" />
-                      <span className="doc-list__title">{s.name || s.base_url}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </>
+
+          </div>
         )}
       </aside>
+
+      {/* Left Resize Handle */}
+      {sidebarOpen && (
+        <div
+          className={`resize-handle resize-handle--left ${isResizingLeft ? 'resize-handle--active' : ''}`}
+          onMouseDown={startResizingLeft}
+        />
+      )}
 
       {/* ── Chat Panel ── */}
       <main className="chat">
@@ -327,6 +399,61 @@ export default function App() {
           </button>
         </div>
       </main>
+
+      {/* Right Resize Handle */}
+      {rightSidebarOpen && (
+        <div
+          className={`resize-handle resize-handle--right ${isResizingRight ? 'resize-handle--active' : ''}`}
+          onMouseDown={startResizingRight}
+        />
+      )}
+
+      {/* ── Right Sidebar ── */}
+      <aside
+        className={`sidebar sidebar--right ${rightSidebarOpen ? 'sidebar--open' : 'sidebar--closed'}`}
+        style={{ width: rightSidebarOpen ? `${rightSidebarWidth}px` : undefined }}
+      >
+        <div className="sidebar__header">
+          <button className="sidebar__toggle" onClick={() => setRightSidebarOpen(o => !o)} aria-label="Toggle right sidebar">
+            {rightSidebarOpen ? '→' : '←'}
+          </button>
+          <div className="sidebar__title">KNOWLEDGE</div>
+        </div>
+
+        {rightSidebarOpen && (
+          <div className="sidebar__content">
+            {/* Sources list */}
+            {sources.length > 0 && (
+              <div className="panel panel--docs">
+                <h2 className="panel__title">
+                  <span className="panel__icon">📚</span>
+                  Indexed Sources
+                </h2>
+                <ul className="doc-list">
+                  {sources.map(s => (
+                    <li
+                      key={s.id}
+                      className={`doc-list__item ${sourceScope === s.id ? 'doc-list__item--active' : ''}`}
+                      onClick={() => setSourceScope(s.id)}
+                    >
+                      <span className="doc-list__dot" />
+                      <span className="doc-list__title">{s.name || s.base_url}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="panel">
+              <h2 className="panel__title">
+                <span className="panel__icon">ℹ️</span>
+                Context Details
+              </h2>
+              <p className="panel__desc">Select a source to view more details.</p>
+            </div>
+          </div>
+        )}
+      </aside>
     </div>
   )
 }

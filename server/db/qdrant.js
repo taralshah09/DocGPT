@@ -19,8 +19,13 @@ const VECTOR_DIM = parseInt(process.env.QDRANT_VECTOR_DIM ?? "384", 10);
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 async function qdrantFetch(path, options = {}) {
+    const headers = { "Content-Type": "application/json" };
+    if (process.env.API_KEY) {
+        headers["api-key"] = process.env.API_KEY;
+    }
+
     const res = await fetch(`${QDRANT_URL}${path}`, {
-        headers: { "Content-Type": "application/json" },
+        headers,
         ...options,
     });
 
@@ -41,42 +46,47 @@ async function qdrantFetch(path, options = {}) {
 export async function ensureCollection() {
     try {
         const info = await qdrantFetch(`/collections/${COLLECTION}`);
-        const currentDim = info.result?.config?.params?.vectors?.size;
+        console.log("[qdrant] Info vectors:", JSON.stringify(info.result?.config?.params?.vectors));
+        const currentDim = info.result?.config?.params?.vectors?.size || info.result?.config?.params?.vectors?.[""]?.size;
 
         if (currentDim && currentDim !== VECTOR_DIM) {
             console.warn(`[qdrant] Dimension mismatch: DB has ${currentDim}, code wants ${VECTOR_DIM}. Recreating collection...`);
             await qdrantFetch(`/collections/${COLLECTION}`, { method: "DELETE" });
         } else {
             console.log(`[qdrant] Collection "${COLLECTION}" already exists with correct dimension (${currentDim}).`);
-            return;
+            // Continue to ensure indexes exist
         }
     } catch (err) {
         // Collection doesn't exist or error — proceed to create
+        console.log(`[qdrant] Creating collection "${COLLECTION}" (dim=${VECTOR_DIM})...`);
+        await qdrantFetch(`/collections/${COLLECTION}`, {
+            method: "PUT",
+            body: JSON.stringify({
+                vectors: {
+                    size: VECTOR_DIM,
+                    distance: "Cosine",
+                },
+                optimizers_config: { default_segment_number: 2 },
+            }),
+        });
     }
 
-    await qdrantFetch(`/collections/${COLLECTION}`, {
-        method: "PUT",
-        body: JSON.stringify({
-            vectors: {
-                size: VECTOR_DIM,
-                distance: "Cosine",   // matches 1 - cosine_distance used in old PG query
-            },
-            // Optional: enable payload indexing if you want to filter by source/doc
-            optimizers_config: { default_segment_number: 2 },
-        }),
-    });
+    // Index the payload fields we filter on so Qdrant can use them efficiently.
+    // Qdrant's PUT /index is idempotent if the index already exists.
+    const fieldsToIndex = ["doc_id", "source_id", "chunk_id"];
+    for (const field_name of fieldsToIndex) {
+        try {
+            await qdrantFetch(`/collections/${COLLECTION}/index`, {
+                method: "PUT",
+                body: JSON.stringify({ field_name, field_schema: "keyword" }),
+            });
+            console.log(`[qdrant] Index ensured for field: ${field_name}`);
+        } catch (err) {
+            console.warn(`[qdrant] Indexed field ${field_name} warning:`, err.message);
+        }
+    }
 
-    // Index the payload fields we filter on so Qdrant can use them efficiently
-    await qdrantFetch(`/collections/${COLLECTION}/index`, {
-        method: "PUT",
-        body: JSON.stringify({ field_name: "doc_id", field_schema: "keyword" }),
-    });
-    await qdrantFetch(`/collections/${COLLECTION}/index`, {
-        method: "PUT",
-        body: JSON.stringify({ field_name: "source_id", field_schema: "keyword" }),
-    });
-
-    console.log(`[qdrant] Collection "${COLLECTION}" created (dim=${VECTOR_DIM}, Cosine).`);
+    console.log(`[qdrant] Collection "${COLLECTION}" ready.`);
 }
 
 // ─── write ops ────────────────────────────────────────────────────────────────

@@ -20,7 +20,7 @@ export function getPool() {
   }
 
   _pool = new Pool({
-    connectionString: DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/postgres",
+    connectionString: DATABASE_URL,
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,

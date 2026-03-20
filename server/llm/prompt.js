@@ -5,7 +5,7 @@
 import OpenAI from "openai";
 
 const LLM_MODEL = "llama-3.3-70b-versatile"; // High-performance Llama model on Groq
-const MAX_CONTEXT = 3000; // approximate char limit for context block
+const MAX_CONTEXT = 3000;
 
 // ─── prompt template ─────────────────────────────────────────────────────────
 
@@ -73,7 +73,13 @@ export async function generateAnswer(question, chunks, { onToken } = {}) {
     apiKey: process.env.GROQ_API_KEY,
     baseURL: "https://api.groq.com/openai/v1"
   });
-  const sources = [...new Set(chunks.map(c => c.url).filter(Boolean))];
+  const sourcesMap = new Map();
+  chunks.forEach(c => {
+    if (c.url && !sourcesMap.has(c.url)) {
+      sourcesMap.set(c.url, { url: c.url, title: c.title || c.url });
+    }
+  });
+  const sources = Array.from(sourcesMap.values());
 
   if (onToken) {
     // Streaming mode

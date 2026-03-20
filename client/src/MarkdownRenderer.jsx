@@ -60,9 +60,10 @@ const CodeBlock = ({ node, className, children, ...props }) => {
           margin: 0,
           borderBottomLeftRadius: '12px',
           borderBottomRightRadius: '12px',
-          background: '#0d0f1a', // Match --bg-1
-          fontSize: '13px',
-          padding: '16px',
+          background: '#0a0a0a', 
+          fontSize: '14px',
+          padding: '20px',
+          fontFamily: "'JetBrains Mono', monospace",
         }}
         {...props}
       >
