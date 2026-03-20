@@ -26,7 +26,8 @@ function SourceAccordion({ sources }) {
         <div className="source-accordion__list">
           {sources.map((s, i) => {
             const url = typeof s === 'string' ? s : (s?.url || '')
-            const title = typeof s === 'string' ? s : (s?.title || s?.url || 'Untitled Source')
+            const rawTitle = typeof s === 'string' ? s : (s?.title || s?.url || 'Untitled Source')
+            const title = rawTitle.length > 100 ? rawTitle.substring(0, 97) + '...' : rawTitle
 
             if (!url && !title) return null;
 

@@ -26,7 +26,7 @@ const CodeBlock = ({ node, className, children, ...props }) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (inline) {
+  if (isInline) {
     return (
       <code className={className} {...props}>
         {children}
@@ -60,7 +60,7 @@ const CodeBlock = ({ node, className, children, ...props }) => {
           margin: 0,
           borderBottomLeftRadius: '12px',
           borderBottomRightRadius: '12px',
-          background: '#0a0a0a', 
+          background: '#0a0a0a',
           fontSize: '14px',
           padding: '20px',
           fontFamily: "'JetBrains Mono', monospace",
