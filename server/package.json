@@ -5,9 +5,9 @@
   "type": "module",
   "main": "api/main.js",
   "scripts": {
-    "start": "node api/main.js",
-    "ingest": "node ingestion/pipeline.js",
-    "dev": "node --watch api/main.js"
+    "start": "node --max-old-space-size=450 api/main.js",
+    "ingest": "node --max-old-space-size=450 ingestion/pipeline.js",
+    "dev": "node --watch --max-old-space-size=450 api/main.js"
   },
   "dependencies": {
     "@huggingface/inference": "^4.13.15",

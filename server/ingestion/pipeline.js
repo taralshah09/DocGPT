@@ -2,16 +2,16 @@
 // Orchestrates the full ingestion pipeline:
 //   Crawl → Extract → Normalize → Chunk → Embed → Store
 //
-// Usage:
-//   node ingestion/pipeline.js
-//   node ingestion/pipeline.js --url https://nextjs.org/docs
+// Optimized for memory (sequential processing) to avoid OOM on 512MB RAM.
 
 import "dotenv/config";
-import { discoverUrls, fetchPages } from "./crawler/index.js";
+import { discoverUrls } from "./crawler/index.js";
+import { fetchUrl, sleep } from "./fetcher.js";
 import { extractMarkdown } from "./extractor.js";
-import { normalizeAll } from "./normalizer.js";
-import { chunkAll } from "./chunker.js";
+import { normalizeDocument } from "./normalizer.js";
+import { chunkDocument } from "./chunker.js";
 import { embedChunks } from "../embeddings/embedder.js";
+import { resolveConfig } from "./crawler/site-configs.js";
 import {
   initDb, upsertSource, upsertDocument,
   insertChunks, getStats
@@ -22,19 +22,20 @@ import {
 import { invalidateIndex as clearIdx } from "../retrieval/search.js";
 import { v4 as uuid } from "uuid";
 
+// ─── config ───────────────────────────────────────────────────────────────────
+
+const MAX_PAGES = parseInt(process.env.MAX_PAGES ?? "200");
+const CRAWL_DELAY = parseInt(process.env.CRAWL_DELAY_MS ?? "500");
+
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Derive a human-readable source name and base_url from a URL string.
- * e.g. "https://nextjs.org/docs/app" → { name: "nextjs.org", base_url: "https://nextjs.org" }
- */
 function sourceFromUrl(url) {
   try {
     const parsed = new URL(url);
     return {
       id: uuid(),
-      name: parsed.hostname,         // e.g. "nextjs.org"
-      base_url: parsed.origin,           // e.g. "https://nextjs.org"
+      name: parsed.hostname,
+      base_url: parsed.origin,
     };
   } catch {
     return {
@@ -45,127 +46,123 @@ function sourceFromUrl(url) {
   }
 }
 
-// ─── default source (react.dev) ───────────────────────────────────────────────
-
 const DEFAULT_BASE_URL = "https://react.dev";
 
 // ─── pipeline ─────────────────────────────────────────────────────────────────
 
-/**
- * Run the full ingestion pipeline.
- * @param {object}   opts
- * @param {string[]} [opts.seedUrls]   If provided, sitemap discovery uses the
- *                                     first URL's domain. Any extra URLs are
- *                                     added to the discovered set.
- */
 export async function runIngestion({ seedUrls } = {}) {
-  // Determine which site we're ingesting
   const baseUrl = seedUrls?.length ? seedUrls[0] : DEFAULT_BASE_URL;
   const SOURCE = sourceFromUrl(baseUrl);
 
   console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log(`  RAG Ingestion Pipeline  —  ${SOURCE.name}`);
+  console.log(`  RAG Ingestion Pipeline (Iterative) — ${SOURCE.name}`);
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
-  // 0. Init DB + source + Qdrant
-  await initDb(); // triggers schema init from models.sql
-  await ensureCollection(); // ensures Qdrant collection exists
+  await initDb();
+  await ensureCollection();
   const actualId = await upsertSource(SOURCE);
-  SOURCE.id = actualId; // ensure we use the ID from DB (could be new or existing)
+  SOURCE.id = actualId;
 
-  // 1. Discover URLs
-  // Always run sitemap discovery from the base URL, then merge any explicit seed URLs
-  console.log(`[pipeline] Target: ${baseUrl}`);
+  console.log(`[pipeline] Step 1: Discovering URLs for ${baseUrl}...`);
   const discovered = await discoverUrls(baseUrl);
-
-  // Merge explicit seed URLs if caller passed them (deduplicate)
-  const urls = [...new Set([...(seedUrls ?? []), ...discovered])].slice(
-    0,
-    parseInt(process.env.MAX_PAGES ?? "200")
-  );
+  const urls = [...new Set([...(seedUrls ?? []), ...discovered])].slice(0, MAX_PAGES);
 
   if (!urls.length) {
     console.error("[pipeline] No URLs discovered. Aborting.");
     return;
   }
 
-  console.log(`[pipeline] Total URLs to crawl: ${urls.length}`);
+  console.log(`[pipeline] Found ${urls.length} URLs. Starting iterative processing…`);
+  console.log(`[pipeline] Strategy: Sequential process (Fetch → Store) to save memory.`);
 
-  // 2. Fetch HTML
-  console.log(`\n[pipeline] STEP 1/5: Crawling ${urls.length} pages…`);
-  const pages = await fetchPages(urls);
+  let successCount = 0;
+  let skippedCount = 0;
+  let errorCount = 0;
+  let newChunksTotal = 0;
 
-  // 3. Extract + normalize
-  console.log("\n[pipeline] STEP 2/5: Extracting + normalizing…");
-  const enriched = pages
-    .map(p => {
-      const { title, markdown } = extractMarkdown(p.html, p.url);
-      return { ...p, title, markdown };
-    })
-    .filter(p => p.markdown.trim().length > 100); // drop near-empty pages
+  // We resolve the site config once for headers
+  const config = resolveConfig(baseUrl);
 
-  const docs = normalizeAll(enriched);
-  console.log(`[pipeline] Normalized ${docs.length} documents`);
+  // Use a simple loop ("linked list" style traversal) to process one URL at a time
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    const progress = `[${i + 1}/${urls.length}]`;
+    
+    try {
+      // 1. Fetch
+      const html = await fetchUrl(url, config.headers ?? {});
+      const fetchedAt = new Date().toISOString();
 
-  // 4. Store documents + detect changes
-  console.log("\n[pipeline] STEP 3/5: Persisting documents…");
-  let newDocs = 0;
-  const changedDocs = [];
+      // 2. Extract
+      const { title, markdown } = extractMarkdown(html, url);
+      
+      if (markdown.trim().length < 100) {
+        console.log(`${progress} Skipping ${url} (too little content)`);
+        skippedCount++;
+        continue;
+      }
 
-  for (const doc of docs) {
-    const { changed } = await upsertDocument({
-      id: doc.doc_id,
-      source_id: SOURCE.id,
-      url: doc.url,
-      title: doc.title,
-      content: doc.content,
-      last_crawled: doc.last_crawled,
-      content_hash: doc.content_hash,
-    });
-    if (changed) {
-      // Clean up staleness in Qdrant too
+      // 3. Normalize
+      const doc = normalizeDocument({ url, title, markdown, fetchedAt });
+
+      // 4. Upsert & Check for changes
+      const { changed } = await upsertDocument({
+        id: doc.doc_id,
+        source_id: SOURCE.id,
+        url: doc.url,
+        title: doc.title,
+        content: doc.content,
+        last_crawled: doc.last_crawled,
+        content_hash: doc.content_hash,
+      });
+
+      if (!changed) {
+        console.log(`${progress} Unchanged: ${url}`);
+        skippedCount++;
+        continue;
+      }
+
+      console.log(`${progress} Processing: ${url} (${title})`);
+
+      // 5. Clean up old state if it changed
       await deleteChunksByDocumentId(doc.doc_id);
-      changedDocs.push(doc);
-      newDocs++;
+
+      // 6. Chunk
+      const chunks = chunkDocument({ ...doc, source_id: SOURCE.id });
+      
+      // 7. Embed (in batches, but limited to this docs chunks)
+      await embedChunks(chunks);
+
+      // 8. Store
+      await insertChunks(chunks);
+      await upsertVectors(chunks);
+
+      successCount++;
+      newChunksTotal += chunks.length;
+
+      // Force a small delay to let Event Loop and GC breathe
+      await sleep(CRAWL_DELAY);
+
+    } catch (err) {
+      errorCount++;
+      console.warn(`${progress} Error processing ${url}: ${err.message}`);
     }
   }
-  console.log(`[pipeline] ${newDocs} new/changed docs (${docs.length - newDocs} unchanged — skipped)`);
 
-  if (!changedDocs.length) {
-    console.log("[pipeline] Nothing new to embed. Done.");
-    return getStats();
-  }
-
-  // 5. Chunk — stamp source_id onto each doc so chunks inherit it for Qdrant filtering
-  console.log("\n[pipeline] STEP 4/5: Chunking…");
-  const docsWithSource = changedDocs.map(d => ({ ...d, source_id: SOURCE.id }));
-  const chunks = chunkAll(docsWithSource);
-
-  // 6. Embed
-  console.log("\n[pipeline] STEP 5/5: Embedding…");
-  await embedChunks(chunks);
-
-  // 7. Store metadata (Postgres) and vectors (Qdrant)
-  console.log("[pipeline] Storing metadata and vectors…");
-  await insertChunks(chunks);
-  await upsertVectors(chunks);
-
-  // 8. Invalidate in-memory index
+  // Finalize
   clearIdx();
-
-  // 9. Summary
   const stats = await getStats();
+
   console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log("  Ingestion complete!");
-  console.log(`  Sources:   ${stats.sources}`);
-  console.log(`  Documents: ${stats.documents}`);
-  console.log(`  Chunks:    ${stats.chunks} (${stats.embedded} embedded)`);
+  console.log(`  Processed: ${successCount} new/updated`);
+  console.log(`  Skipped:   ${skippedCount} unchanged/tiny`);
+  console.log(`  Failed:    ${errorCount} errors`);
+  console.log(`  New Chunks: ${newChunksTotal}`);
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
   return stats;
 }
-
-// ─── CLI entry point ──────────────────────────────────────────────────────────
 
 if (process.argv[1].endsWith("pipeline.js")) {
   const args = process.argv.slice(2);
