@@ -598,3 +598,128 @@ html, body, #root {
   opacity: 1;
   text-decoration: underline;
 }
+
+/* ── AI Suggestions ── */
+.ai-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all var(--transition);
+  user-select: none;
+}
+.ai-toggle:hover {
+  border-color: var(--accent);
+  background: var(--bg-3);
+}
+.ai-toggle--active {
+  background: var(--green-soft);
+  border-color: var(--accent);
+  box-shadow: 0 0 10px var(--green-glow);
+}
+.ai-toggle__switch {
+  width: 28px;
+  height: 16px;
+  background: var(--bg-3);
+  border-radius: 20px;
+  position: relative;
+  transition: all var(--transition);
+}
+.ai-toggle--active .ai-toggle__switch {
+  background: var(--accent);
+}
+.ai-toggle__knob {
+  width: 12px;
+  height: 12px;
+  background: var(--white);
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: all var(--transition);
+}
+.ai-toggle--active .ai-toggle__knob {
+  left: 14px;
+  background: var(--black);
+}
+.ai-toggle__label {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.ai-toggle--active .ai-toggle__label {
+  color: var(--accent);
+}
+
+.suggestions-box {
+  padding: 0 32px 12px;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.suggestions-box__title {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-left: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.suggestions-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.suggestion-btn {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--transition);
+  font-family: var(--font-body);
+  white-space: nowrap;
+}
+
+.suggestion-btn:hover {
+  background: var(--bg-3);
+  border-color: var(--white-muted);
+  color: var(--text-0);
+  transform: translateY(-1px);
+}
+
+.suggestion-btn--original {
+  background: var(--bg-1);
+  border-style: dashed;
+  color: var(--text-2);
+}
+
+.suggestion-btn--original:hover {
+  background: var(--green-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+  border-style: solid;
+}

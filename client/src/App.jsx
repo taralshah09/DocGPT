@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { sendQueryStream, ingestUrl, queryDocuments, querySources, fetchStats } from './api.js'
+import { sendQueryStream, ingestUrl, queryDocuments, querySources, fetchStats, fetchSuggestions } from './api.js'
 import './App.css'
 import MarkdownRenderer from './MarkdownRenderer'
 
@@ -76,6 +76,27 @@ export default function App() {
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  
+  // AI Suggestions
+  const [aiSuggestionsEnabled, setAiSuggestionsEnabled] = useState(() => {
+    const saved = localStorage.getItem('ai_suggestions_enabled')
+    return saved !== null ? JSON.parse(saved) : true
+  })
+  const [suggestions, setSuggestions] = useState([])
+  const [originalInput, setOriginalInput] = useState('')
+  const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false)
+
+  useEffect(() => {
+    localStorage.setItem('ai_suggestions_enabled', JSON.stringify(aiSuggestionsEnabled))
+  }, [aiSuggestionsEnabled])
+
+  // Clear suggestions if user types something else
+  useEffect(() => {
+    if (originalInput && input !== originalInput && suggestions.length > 0) {
+      setSuggestions([])
+      setOriginalInput('')
+    }
+  }, [input, originalInput, suggestions.length])
 
   // source selection — null until sources are loaded, then defaults to React (or first source)
   const [sourceScope, setSourceScope] = useState(null) // source_id string
@@ -150,16 +171,37 @@ export default function App() {
   }, [messages])
 
   // ── send query ──────────────────────────────────────────────────────────────
-  const handleSend = useCallback(async () => {
-    const q = input.trim()
+  const handleSend = useCallback(async (forcedQuery = null) => {
+    const q = (forcedQuery || input).trim()
     if (!q || loading) return
 
-    const userMsg = { id: Date.now(), role: 'user', content: q }
+    // AI Suggestions flow
+    if (aiSuggestionsEnabled && !forcedQuery && suggestions.length === 0) {
+      setIsFetchingSuggestions(true)
+      setOriginalInput(q)
+      try {
+        const res = await fetchSuggestions(q)
+        if (res.suggestions?.length > 0) {
+          setSuggestions(res.suggestions)
+          return // Pause to show suggestions
+        }
+      } catch (err) {
+        console.error("Suggestions failed:", err)
+      } finally {
+        setIsFetchingSuggestions(false)
+      }
+    }
+
+    // Normal query flow
+    setSuggestions([])
+    const targetQuery = forcedQuery || q
+
+    const userMsg = { id: Date.now(), role: 'user', content: targetQuery }
     const aiId = Date.now() + 1
     const aiMsg = { id: aiId, role: 'assistant', content: '', streaming: true, sources: [] }
 
     setMessages(prev => [...prev, userMsg, aiMsg])
-    setInput('')
+    if (!forcedQuery) setInput('')
     setLoading(true)
 
     try {
@@ -175,12 +217,11 @@ export default function App() {
           setMessages(prev => prev.map(m =>
             m.id === aiId ? { ...m, streaming: false, sources: sources ?? [] } : m
           ))
-          // refresh stats
           fetchStats().then(setStats).catch(() => { })
         },
       }
 
-      await sendQueryStream(q, opts)
+      await sendQueryStream(targetQuery, opts)
     } catch (err) {
       setMessages(prev => prev.map(m =>
         m.id === aiId
@@ -191,7 +232,7 @@ export default function App() {
       setLoading(false)
       inputRef.current?.focus()
     }
-  }, [input, loading, sourceScope, sources])
+  }, [input, loading, sourceScope, aiSuggestionsEnabled, suggestions])
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -368,12 +409,52 @@ export default function App() {
             </div>
           )}
         </header>
+        
+        {/* Toggle AI Suggestions */}
+        <div style={{ padding: '0 32px 10px', display: 'flex', justifyContent: 'flex-end' }}>
+          <div 
+            className={`ai-toggle ${aiSuggestionsEnabled ? 'ai-toggle--active' : ''}`}
+            onClick={() => setAiSuggestionsEnabled(!aiSuggestionsEnabled)}
+            title={aiSuggestionsEnabled ? "AI suggests better queries" : "AI suggestions disabled"}
+          >
+            <span className="ai-toggle__label">AI Suggestions</span>
+            <div className="ai-toggle__switch">
+              <div className="ai-toggle__knob" />
+            </div>
+          </div>
+        </div>
 
-        {/* Messages */}
         <div className="chat__messages" role="log" aria-live="polite">
           {messages.map(msg => <Message key={msg.id} msg={msg} />)}
           <div ref={bottomRef} />
         </div>
+
+        {/* AI Suggestions Box */}
+        {suggestions.length > 0 && (
+          <div className="suggestions-box">
+            <div className="suggestions-box__title">
+              <span className="panel__icon">✨</span>
+              Recommended Queries
+            </div>
+            <div className="suggestions-list">
+              {suggestions.map((s, i) => (
+                <button 
+                  key={i} 
+                  className="suggestion-btn"
+                  onClick={() => handleSend(s)}
+                >
+                  {s}
+                </button>
+              ))}
+              <button 
+                className="suggestion-btn suggestion-btn--original"
+                onClick={() => handleSend(originalInput)}
+              >
+                Continue with "{originalInput}"
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Input bar */}
         <div className="chat__inputbar">
@@ -394,7 +475,7 @@ export default function App() {
             disabled={loading || !input.trim()}
             aria-label="Send"
           >
-            {loading ? <span className="spinner" /> : (
+            {loading || isFetchingSuggestions ? <span className="spinner" /> : (
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="20" height="20">
                 <line x1="22" y1="2" x2="11" y2="13" />
                 <polygon points="22 2 15 22 11 13 2 9 22 2" />

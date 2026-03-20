@@ -98,3 +98,14 @@ export async function ingestUrl(url) {
   }
   return res.json(); // { message: "Ingestion started" }
 }
+
+// ── get AI suggestions ────────────────────────────────────────────────────────
+export async function fetchSuggestions(question) {
+  const res = await fetch(`${BASE}/suggestions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  if (!res.ok) throw new Error(`[/suggestions] ${res.status}`);
+  return res.json(); // { suggestions: [string, string, string] }
+}
