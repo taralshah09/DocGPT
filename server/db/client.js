@@ -23,7 +23,10 @@ export function getPool() {
     connectionString: DATABASE_URL,
     max: 10,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 10000, // Increased for serverless "cold starts"
+    ssl: {
+      rejectUnauthorized: false
+    }
   });
 
   return _pool;
