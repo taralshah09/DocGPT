@@ -1,6 +1,6 @@
 import "dotenv/config";
 import express from "express";
-import { ask } from "../llm/prompt.js";
+import { ask, generateSuggestions } from "../llm/prompt.js";
 import { search } from "../retrieval/search.js";
 import { runIngestion } from "../ingestion/pipeline.js";
 import { getStats, getPool } from "../db/client.js";
@@ -66,6 +66,44 @@ app.post("/query", async (req, res) => {
     }
   } catch (err) {
     console.error("[/query] ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /suggestions
+ * Body: { question: string }
+ */
+app.post("/suggestions", async (req, res) => {
+  const { question } = req.body;
+  if (!question?.trim()) {
+    return res.status(400).json({ error: "question is required" });
+  }
+
+  try {
+    const suggestions = await generateSuggestions(question);
+    res.json({ suggestions });
+  } catch (err) {
+    console.error("[/suggestions] ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /suggestions
+ * Body: { question: string }
+ */
+app.post("/suggestions", async (req, res) => {
+  const { question } = req.body;
+  if (!question?.trim()) {
+    return res.status(400).json({ error: "question is required" });
+  }
+
+  try {
+    const suggestions = await generateSuggestions(question);
+    res.json({ suggestions });
+  } catch (err) {
+    console.error("[/suggestions] ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });

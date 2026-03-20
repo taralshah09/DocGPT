@@ -114,3 +114,52 @@ export async function ask(question, opts = {}) {
 
   return { answer, sources, chunks };
 }
+
+/**
+ * Generate 3 recommended queries for better results.
+ */
+export async function generateSuggestions(question) {
+  const client = new OpenAI({
+    apiKey: process.env.GROQ_API_KEY,
+    baseURL: "https://api.groq.com/openai/v1"
+  });
+
+  const system = `You are a helpful search assistant. 
+Given a user's query, suggest 3 improved versions of the query that would yield better, more specific results in a documentation search.
+Focus on React development and technical accuracy.
+Return as a JSON object with a key "suggestions" containing an array of 3 strings.
+Example: { "suggestions": ["How to use useRef in React?", "When to use useRef vs useState?", "useRef for DOM manipulation examples"] }`;
+
+  const user = `Original query: ${question}`;
+
+  try {
+    const res = await client.chat.completions.create({
+      model: "llama-3.1-8b-instant",
+      temperature: 0.7,
+      max_tokens: 200,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const content = res.choices[0].message.content;
+    console.log("[generateSuggestions] LLM output:", content);
+    
+    // Sometimes the model adds extra text even in JSON mode
+    const startIdx = content.indexOf('{');
+    const endIdx = content.lastIndexOf('}');
+    if (startIdx === -1 || endIdx === -1) {
+      console.warn("[generateSuggestions] No JSON object found in output");
+      return [];
+    }
+    const jsonStr = content.substring(startIdx, endIdx + 1);
+    const data = JSON.parse(jsonStr);
+    console.log("[generateSuggestions] Parsed suggestions:", data.suggestions);
+    return data.suggestions || [];
+  } catch (err) {
+    console.error("[generateSuggestions] ERROR:", err);
+    return [];
+  }
+}
