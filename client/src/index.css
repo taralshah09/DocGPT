@@ -1,0 +1,17 @@
+/* Global resets — design system lives in App.css */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+html, #root {
+  height: 100%;
+  width: 100%;
+}

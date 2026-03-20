@@ -1,0 +1,343 @@
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { sendQueryStream, ingestUrl, queryDocuments, querySources, fetchStats } from './api.js'
+import './App.css'
+
+// ── tiny markdown renderer for AI responses ──────────────────────────────────
+function renderMarkdown(text) {
+  // bold
+  let t = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+  // inline code
+  t = t.replace(/`([^`]+)`/g, '<code>$1</code>')
+  // line breaks
+  t = t.replace(/\n/g, '<br />')
+  return t
+}
+
+// ── Message bubble component ─────────────────────────────────────────────────
+function Message({ msg }) {
+  const isUser = msg.role === 'user'
+  const isStreaming = msg.role === 'assistant' && msg.streaming
+
+  return (
+    <div className={`msg ${isUser ? 'msg--user' : 'msg--ai'}`}>
+      <div className="msg__avatar">{isUser ? 'U' : '✦'}</div>
+      <div className="msg__body">
+        <div
+          className={`msg__bubble ${isStreaming ? 'msg__bubble--streaming' : ''}`}
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content || '') }}
+        />
+        {msg.sources?.length > 0 && (
+          <div className="msg__sources">
+            <span className="msg__sources-label">Sources</span>
+            {msg.sources.map((s, i) => (
+              <a key={i} href={s} target="_blank" rel="noopener noreferrer" className="msg__source-link">
+                {(() => { try { return new URL(s).hostname } catch { return s } })()}
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Main App ─────────────────────────────────────────────────────────────────
+export default function App() {
+  // chat state
+  const [messages, setMessages] = useState([
+    { id: 'welcome', role: 'assistant', content: 'Hello! Ask me anything about your embedded documents. Use the dropdown to scope your search to a specific source.' }
+  ])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  // source selection — null until sources are loaded, then defaults to React (or first source)
+  const [sourceScope, setSourceScope] = useState(null) // source_id string
+  const [docs, setDocs] = useState([])
+  const [sources, setSources] = useState([])
+
+  // embed panel
+  const [embedUrl, setEmbedUrl] = useState('')
+  const [embedStatus, setEmbedStatus] = useState(null) // null | 'loading' | 'ok' | 'error'
+  const [embedMsg, setEmbedMsg] = useState('')
+
+  // stats
+  const [stats, setStats] = useState(null)
+
+  // sidebar collapsed on mobile
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  const bottomRef = useRef(null)
+  const inputRef = useRef(null)
+
+  // ── load sources, docs, stats on mount ─────────────────────────────────────
+  useEffect(() => {
+    Promise.all([queryDocuments(), querySources(), fetchStats()])
+      .then(([d, s, st]) => {
+        setDocs(d)
+        setSources(s)
+        setStats(st)
+        // Default to React source, or the first available source
+        if (s.length > 0) {
+          const reactSource = s.find(src => src.name?.toLowerCase() === 'react')
+          setSourceScope((reactSource ?? s[0]).id)
+        }
+      })
+      .catch(() => {/* server may not have data yet, ok */ })
+  }, [])
+
+  // ── auto-scroll to bottom ───────────────────────────────────────────────────
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  // ── send query ──────────────────────────────────────────────────────────────
+  const handleSend = useCallback(async () => {
+    const q = input.trim()
+    if (!q || loading) return
+
+    const userMsg = { id: Date.now(), role: 'user', content: q }
+    const aiId = Date.now() + 1
+    const aiMsg = { id: aiId, role: 'assistant', content: '', streaming: true, sources: [] }
+
+    setMessages(prev => [...prev, userMsg, aiMsg])
+    setInput('')
+    setLoading(true)
+
+    try {
+      const opts = {
+        topK: 5,
+        source_id: sourceScope ?? undefined,
+        onToken: (token) => {
+          setMessages(prev => prev.map(m =>
+            m.id === aiId ? { ...m, content: m.content + token } : m
+          ))
+        },
+        onDone: ({ sources }) => {
+          setMessages(prev => prev.map(m =>
+            m.id === aiId ? { ...m, streaming: false, sources: sources ?? [] } : m
+          ))
+          // refresh stats
+          fetchStats().then(setStats).catch(() => { })
+        },
+      }
+
+      await sendQueryStream(q, opts)
+    } catch (err) {
+      setMessages(prev => prev.map(m =>
+        m.id === aiId
+          ? { ...m, content: `⚠️ Error: ${err.message}`, streaming: false }
+          : m
+      ))
+    } finally {
+      setLoading(false)
+      inputRef.current?.focus()
+    }
+  }, [input, loading, sourceScope, sources])
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  // ── embed URL ───────────────────────────────────────────────────────────────
+  const handleEmbed = async () => {
+    const url = embedUrl.trim()
+    if (!url) return
+    try { new URL(url) } catch { setEmbedStatus('error'); setEmbedMsg('Invalid URL'); return }
+
+    setEmbedStatus('loading')
+    setEmbedMsg('Ingesting…')
+
+    try {
+      const data = await ingestUrl(url)
+      setEmbedStatus('ok')
+      setEmbedMsg(data.message ?? 'Ingestion started ✓')
+      setEmbedUrl('')
+
+      // Refresh docs list after a short delay (ingestion is async)
+      setTimeout(() => {
+        Promise.all([queryDocuments(), querySources()])
+          .then(([d, s]) => { setDocs(d); setSources(s) })
+          .catch(() => { })
+      }, 3000)
+    } catch (err) {
+      setEmbedStatus('error')
+      setEmbedMsg(err.message)
+    }
+
+    setTimeout(() => setEmbedStatus(null), 5000)
+  }
+
+  // ── dropdown options ────────────────────────────────────────────────────────
+  const hasScope = sources.length > 0
+  const activeScopeName = sources.find(s => s.id === sourceScope)?.name ?? null
+
+  // ── render ──────────────────────────────────────────────────────────────────
+  return (
+    <div className="layout">
+      {/* ── Sidebar ── */}
+      <aside className={`sidebar ${sidebarOpen ? 'sidebar--open' : 'sidebar--closed'}`}>
+        <div className="sidebar__header">
+          <div className="logo">
+            <span className="logo__icon">✦</span>
+            <span className="logo__text">DocGPT</span>
+          </div>
+          <button className="sidebar__toggle" onClick={() => setSidebarOpen(o => !o)} aria-label="Toggle sidebar">
+            {sidebarOpen ? '←' : '→'}
+          </button>
+        </div>
+
+        {sidebarOpen && (
+          <>
+            {/* Stats badge */}
+            {stats && (
+              <div className="stats-card">
+                <div className="stats-card__item">
+                  <span className="stats-card__val">{stats.documents}</span>
+                  <span className="stats-card__label">Docs</span>
+                </div>
+                <div className="stats-card__divider" />
+                <div className="stats-card__item">
+                  <span className="stats-card__val">{stats.chunks}</span>
+                  <span className="stats-card__label">Chunks</span>
+                </div>
+                <div className="stats-card__divider" />
+                <div className="stats-card__item">
+                  <span className="stats-card__val">{stats.sources}</span>
+                  <span className="stats-card__label">Sources</span>
+                </div>
+              </div>
+            )}
+
+            {/* Embed Panel */}
+            <div className="panel">
+              <h2 className="panel__title">
+                <span className="panel__icon">⊕</span>
+                Embed a Document
+              </h2>
+              <p className="panel__desc">Paste a URL to ingest and embed into your vector DB.</p>
+
+              <div className="embed-form">
+                <input
+                  id="embed-url-input"
+                  className="input"
+                  type="url"
+                  placeholder="https://example.com/docs"
+                  value={embedUrl}
+                  onChange={e => setEmbedUrl(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleEmbed()}
+                />
+                <button
+                  id="embed-btn"
+                  className={`btn btn--primary ${embedStatus === 'loading' ? 'btn--loading' : ''}`}
+                  onClick={handleEmbed}
+                  disabled={embedStatus === 'loading'}
+                >
+                  {embedStatus === 'loading' ? (
+                    <span className="spinner" />
+                  ) : 'Embed'}
+                </button>
+              </div>
+
+              {embedStatus && embedStatus !== 'loading' && (
+                <div className={`toast toast--${embedStatus}`}>
+                  {embedStatus === 'ok' ? '✓' : '✕'} {embedMsg}
+                </div>
+              )}
+            </div>
+
+            {/* Sources list */}
+            {sources.length > 0 && (
+              <div className="panel panel--docs">
+                <h2 className="panel__title">
+                  <span className="panel__icon">📚</span>
+                  Indexed Sources
+                </h2>
+                <ul className="doc-list">
+                  {sources.map(s => (
+                    <li
+                      key={s.id}
+                      className={`doc-list__item ${sourceScope === s.id ? 'doc-list__item--active' : ''}`}
+                      onClick={() => setSourceScope(s.id)}
+                    >
+                      <span className="doc-list__dot" />
+                      <span className="doc-list__title">{s.name || s.base_url}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
+      </aside>
+
+      {/* ── Chat Panel ── */}
+      <main className="chat">
+        {/* Chat header */}
+        <header className="chat__header">
+          <div className="chat__title">
+            <h1>Ask your docs</h1>
+            {activeScopeName && (
+              <span className="chat__scope-badge">
+                {activeScopeName}
+              </span>
+            )}
+          </div>
+
+          {/* Source scope dropdown — fetched from /sources, no "All" option */}
+          {sources.length > 0 && (
+            <div className="scope-select-wrap">
+              <label htmlFor="source-scope" className="scope-select-wrap__label">Source</label>
+              <select
+                id="source-scope"
+                className="select"
+                value={sourceScope ?? ''}
+                onChange={e => setSourceScope(e.target.value)}
+              >
+                {sources.map(s => (
+                  <option key={s.id} value={s.id}>{s.name || s.base_url}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </header>
+
+        {/* Messages */}
+        <div className="chat__messages" role="log" aria-live="polite">
+          {messages.map(msg => <Message key={msg.id} msg={msg} />)}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input bar */}
+        <div className="chat__inputbar">
+          <textarea
+            id="chat-input"
+            ref={inputRef}
+            className="chat__input"
+            placeholder={hasScope || true ? 'Ask a question…' : 'Embed a document first, then ask…'}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={1}
+          />
+          <button
+            id="chat-send-btn"
+            className={`btn btn--send ${loading ? 'btn--loading' : ''}`}
+            onClick={handleSend}
+            disabled={loading || !input.trim()}
+            aria-label="Send"
+          >
+            {loading ? <span className="spinner" /> : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="20" height="20">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </main>
+    </div>
+  )
+}
