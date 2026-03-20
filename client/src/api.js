@@ -1,7 +1,7 @@
 // client/src/api.js
 // Thin wrappers around the DocGPT Express API (localhost:3001)
 
-const BASE = process.env.BACKEND_URL || "https://docgpt-gyo9.onrender.com";
+const BASE = import.meta.env.VITE_BACKEND_URL || "https://docgpt-gyo9.onrender.com";
 
 // ── list sources ──────────────────────────────────────────────────────────────
 export async function querySources() {
