@@ -1,17 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { sendQueryStream, ingestUrl, queryDocuments, querySources, fetchStats } from './api.js'
 import './App.css'
-
-// ── tiny markdown renderer for AI responses ──────────────────────────────────
-function renderMarkdown(text) {
-  // bold
-  let t = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-  // inline code
-  t = t.replace(/`([^`]+)`/g, '<code>$1</code>')
-  // line breaks
-  t = t.replace(/\n/g, '<br />')
-  return t
-}
+import MarkdownRenderer from './MarkdownRenderer'
 
 // ── Message bubble component ─────────────────────────────────────────────────
 function Message({ msg }) {
@@ -22,10 +12,9 @@ function Message({ msg }) {
     <div className={`msg ${isUser ? 'msg--user' : 'msg--ai'}`}>
       <div className="msg__avatar">{isUser ? 'U' : '✦'}</div>
       <div className="msg__body">
-        <div
-          className={`msg__bubble ${isStreaming ? 'msg__bubble--streaming' : ''}`}
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content || '') }}
-        />
+        <div className={`msg__bubble ${isStreaming ? 'msg__bubble--streaming' : ''}`}>
+          <MarkdownRenderer content={msg.content || ''} />
+        </div>
         {msg.sources?.length > 0 && (
           <div className="msg__sources">
             <span className="msg__sources-label">Sources</span>
