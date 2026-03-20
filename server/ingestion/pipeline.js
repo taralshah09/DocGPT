@@ -6,7 +6,7 @@
 
 import "dotenv/config";
 import { discoverUrls } from "./crawler/index.js";
-import { fetchUrl, sleep } from "./fetcher.js";
+import { fetchUrl, sleep } from "./crawler/fetcher.js";
 import { extractMarkdown } from "./extractor.js";
 import { normalizeDocument } from "./normalizer.js";
 import { chunkDocument } from "./chunker.js";
