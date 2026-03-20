@@ -178,8 +178,8 @@ app.get("/health", (_req, res) => {
 
 // ─── start ────────────────────────────────────────────────────────────────────
 
-app.listen(3001, () => {
-  console.log(`\n🚀 RAG API running at http://localhost:${3001}`);
+app.listen(PORT, () => {
+  console.log(`\n🚀 RAG API running at http://localhost:${PORT}`);
   console.log("   POST /query    — ask a question");
   console.log("   GET  /search   — raw semantic search");
   console.log("   POST /ingest   — trigger crawl+embed");
