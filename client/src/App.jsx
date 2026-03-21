@@ -134,7 +134,7 @@ export default function App() {
   // stats
   const [stats, setStats] = useState(null)
 
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 900)
   const [sidebarWidth, setSidebarWidth] = useState(280)
   const [isResizingLeft, setIsResizingLeft] = useState(false)
 
@@ -240,10 +240,10 @@ export default function App() {
           setMessages(prev => prev.map(m => {
             if (m.id === aiId) {
               const isEmpty = !m.content || m.content.trim().length === 0
-              return { 
-                ...m, 
-                content: isEmpty ? "It didn't work" : m.content, 
-                streaming: false, 
+              return {
+                ...m,
+                content: isEmpty ? "It didn't work" : m.content,
+                streaming: false,
                 sources: sources ?? [],
                 isError: isEmpty
               }
@@ -293,14 +293,14 @@ export default function App() {
           setEmbedStatus('ok')
           setEmbedMsg(data.message ?? 'Ingestion complete ✓')
           setEmbedUrl('')
-          
+
           Promise.all([queryDocuments(), querySources(), fetchStats()])
-          .then(([d, s, st]) => { 
-            setDocs(d); 
-            setSources(s); 
-            setStats(st) 
-          })
-          .catch(() => { })
+            .then(([d, s, st]) => {
+              setDocs(d);
+              setSources(s);
+              setStats(st)
+            })
+            .catch(() => { })
         }
       })
     } catch (err) {
@@ -329,6 +329,16 @@ export default function App() {
             <span className="logo__icon">{'>_'}</span>
             <span className="logo__text">DOCGPT <span className="logo__beta">BETA</span></span>
           </div>
+          <button
+            className="sidebar-close-btn"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close Sidebar"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="20" height="20">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
 
         {sidebarOpen && (
@@ -393,7 +403,6 @@ export default function App() {
             {sources.length > 0 && (
               <div className="panel panel--docs">
                 <h2 className="panel__title">
-                  <span className="panel__icon">📚</span>
                   KNOWLEDGE
                 </h2>
                 <ul className="doc-list">
@@ -415,6 +424,10 @@ export default function App() {
       </aside>
 
       {sidebarOpen && (
+        <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      {sidebarOpen && (
         <div
           className={`resize-handle resize-handle--left ${isResizingLeft ? 'resize-handle--active' : ''}`}
           onMouseDown={startResizingLeft}
@@ -423,6 +436,27 @@ export default function App() {
 
       <main className="chat">
         <header className="chat__header">
+          <button
+            className="sidebar-toggle"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label="Toggle Sidebar"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="20" height="20">
+              {sidebarOpen ? (
+                <>
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </>
+              ) : (
+                <>
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </>
+              )}
+            </svg>
+          </button>
+
           <div className="chat__title">
             <h1>Ask your docs</h1>
             {activeScopeName && (
@@ -450,7 +484,7 @@ export default function App() {
         </header>
 
         {/* Toggle AI Suggestions */}
-        <div style={{ padding: '0 32px 10px', display: 'flex', justifyContent: 'flex-end' }}>
+        <div className="ai-toggle-wrapper">
           <div
             className={`ai-toggle ${aiSuggestionsEnabled ? 'ai-toggle--active' : ''}`}
             onClick={() => setAiSuggestionsEnabled(!aiSuggestionsEnabled)}
