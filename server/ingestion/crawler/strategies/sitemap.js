@@ -11,32 +11,37 @@ import { fetchSafe } from "../fetcher.js";
  * @param {SiteConfig} config   resolved site config
  * @returns {Promise<string[]>} discovered URLs (may be empty)
  */
-export async function discoverViaSitemap(origin, config) {
+export async function discoverViaSitemap(origin, config, onStatus) {
+    const report = (msg) => {
+        console.log(msg);
+        if (onStatus) onStatus(msg);
+    };
+
     for (const path of config.sitemapPaths) {
         const sitemapUrl = `${origin}${path}`;
-        console.log(`[sitemap] Trying ${sitemapUrl}`);
+        report(`[sitemap] Trying ${sitemapUrl}`);
 
         const xml = await fetchSafe(sitemapUrl, { Accept: "application/xml, text/xml, */*" });
         if (!xml || xml.trim().length < 50) continue;
 
         // Quick sanity check — should look like XML
         if (!xml.trim().startsWith("<")) {
-            console.warn(`[sitemap] ${sitemapUrl} returned non-XML content, skipping`);
+            report(`[sitemap] ${sitemapUrl} returned non-XML content, skipping`);
             continue;
         }
 
         try {
             const urls = await parseXml(xml, origin, config);
             if (urls.length > 0) {
-                console.log(`[sitemap] Found ${urls.length} URLs via ${sitemapUrl}`);
+                report(`[sitemap] Found ${urls.length} URLs via ${sitemapUrl}`);
                 return urls;
             }
         } catch (err) {
-            console.warn(`[sitemap] Parse error for ${sitemapUrl}: ${err.message}`);
+            report(`[sitemap] Parse error for ${sitemapUrl}: ${err.message}`);
         }
     }
 
-    console.warn(`[sitemap] No usable sitemap found for ${origin}`);
+    report(`[sitemap] No usable sitemap found for ${origin}`);
     return [];
 }
 

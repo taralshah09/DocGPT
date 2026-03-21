@@ -34,7 +34,7 @@ const MIN_URLS_BEFORE_BFS = parseInt(process.env.MIN_URLS_BEFORE_BFS ?? "5");
  * @param {string} seedUrl  e.g. "https://nextjs.org/docs"
  * @returns {Promise<string[]>}
  */
-export async function discoverUrls(seedUrl) {
+export async function discoverUrls(seedUrl, onStatus) {
     let origin;
     try {
         origin = new URL(seedUrl).origin;
@@ -43,49 +43,54 @@ export async function discoverUrls(seedUrl) {
     }
 
     const config = resolveConfig(seedUrl);
-    console.log(`[crawler] Site config for ${origin}:`, {
-        docPathPrefix: config.docPathPrefix,
-        sitemapPaths: config.sitemapPaths,
-        navSelectors: config.navSelectors?.length,
-    });
+    
+    const report = (msg) => {
+        console.log(msg);
+        if (onStatus) onStatus(msg);
+    };
+
+    report(`[crawler] Site config for ${origin}:
+    docPathPrefix: ${config.docPathPrefix}
+    sitemapPaths: ${config.sitemapPaths}
+    navSelectors: ${config.navSelectors?.length}`);
 
     const pool = new Set([seedUrl]);  // always include the seed itself
 
     // ── Strategy 1: llms.txt ──────────────────────────────────────────────────
-    console.log("\n[crawler] Strategy 1/4: llms.txt");
+    report("\n[crawler] Strategy 1/4: llms.txt");
     const llmsUrls = await discoverViaLlmsTxt(origin, config);
     llmsUrls.forEach(u => pool.add(u));
-    console.log(`[crawler] Pool after llms.txt: ${pool.size} URLs`);
+    report(`[crawler] Pool after llms.txt: ${pool.size} URLs`);
 
     // ── Strategy 2: Sitemap XML ───────────────────────────────────────────────
-    console.log("\n[crawler] Strategy 2/4: Sitemap XML");
-    const sitemapUrls = await discoverViaSitemap(origin, config);
+    report("\n[crawler] Strategy 2/4: Sitemap XML");
+    const sitemapUrls = await discoverViaSitemap(origin, config, onStatus);
     sitemapUrls.forEach(u => pool.add(u));
-    console.log(`[crawler] Pool after sitemap: ${pool.size} URLs`);
+    report(`[crawler] Pool after sitemap: ${pool.size} URLs`);
 
     // ── Strategy 3 & 4: Nav scrape + BFS (only if pool is still small) ────────
     if (pool.size < MIN_URLS_BEFORE_BFS) {
-        console.log(`\n[crawler] Pool is small (${pool.size}), trying nav scrape + BFS`);
+        report(`\n[crawler] Pool is small (${pool.size}), trying nav scrape + BFS`);
 
         // Strategy 3: Nav sidebar (1 request, fast)
-        console.log("[crawler] Strategy 3/4: Nav sidebar scrape");
+        report("[crawler] Strategy 3/4: Nav sidebar scrape");
         const navUrls = await discoverViaNav(seedUrl, origin, config);
         navUrls.forEach(u => pool.add(u));
-        console.log(`[crawler] Pool after nav scrape: ${pool.size} URLs`);
+        report(`[crawler] Pool after nav scrape: ${pool.size} URLs`);
 
         // Strategy 4: Full BFS — always run if still small, seeds with everything found so far
-        console.log("[crawler] Strategy 4/4: BFS crawl");
+        report("[crawler] Strategy 4/4: BFS crawl");
         const bfsUrls = await discoverViaBfs([...pool], origin, config);
         bfsUrls.forEach(u => pool.add(u));
-        console.log(`[crawler] Pool after BFS: ${pool.size} URLs`);
+        report(`[crawler] Pool after BFS: ${pool.size} URLs`);
     } else {
-        console.log(`[crawler] Skipping BFS (pool size ${pool.size} ≥ ${MIN_URLS_BEFORE_BFS})`);
+        report(`[crawler] Skipping BFS (pool size ${pool.size} ≥ ${MIN_URLS_BEFORE_BFS})`);
 
         // Still run nav scrape to catch any pages the sitemap missed
-        console.log("\n[crawler] Strategy 3/4: Nav sidebar scrape (supplemental)");
+        report("\n[crawler] Strategy 3/4: Nav sidebar scrape (supplemental)");
         const navUrls = await discoverViaNav(seedUrl, origin, config);
         navUrls.forEach(u => pool.add(u));
-        console.log(`[crawler] Pool after supplemental nav: ${pool.size} URLs`);
+        report(`[crawler] Pool after supplemental nav: ${pool.size} URLs`);
     }
 
     const discovered = [...pool]
@@ -99,7 +104,7 @@ export async function discoverUrls(seedUrl) {
         })
         .slice(0, MAX_PAGES);
 
-    console.log(`\n[crawler] ✓ Discovery complete — ${discovered.length} URLs (capped at ${MAX_PAGES})`);
+    report(`\n[crawler] ✓ Discovery complete — ${discovered.length} URLs (capped at ${MAX_PAGES})`);
     return discovered;
 }
 

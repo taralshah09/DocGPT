@@ -126,12 +126,25 @@ app.get("/search", async (req, res) => {
 
 app.post("/ingest", async (req, res) => {
   const { urls } = req.body ?? {};
+  console.log("[/ingest] Received:", { urls });
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
   try {
-    // Run async; respond immediately with 202
-    res.status(202).json({ message: "Ingestion started" });
-    await runIngestion({ seedUrls: urls });
+    await runIngestion({
+      seedUrls: urls,
+      onStatus: (msg) => {
+        res.write(`data: ${JSON.stringify({ status: msg })}\n\n`);
+      }
+    });
+    res.write(`data: ${JSON.stringify({ done: true, message: "Ingestion complete" })}\n\n`);
+    res.end();
   } catch (err) {
-    console.error("[/ingest]", err);
+    console.error("[/ingest] ERROR:", err);
+    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+    res.end();
   }
 });
 

@@ -55,12 +55,37 @@ function Message({ msg }) {
     <div className={`msg ${isUser ? 'msg--user' : 'msg--ai'}`}>
       <div className="msg__avatar">{isUser ? 'U' : 'AI'}</div>
       <div className="msg__body">
-        <div className={`msg__bubble ${isStreaming ? 'msg__bubble--streaming' : ''}`}>
+        <div className={`msg__bubble ${isStreaming ? 'msg__bubble--streaming' : ''} ${msg.isError ? 'msg__bubble--error' : ''}`}>
           <MarkdownRenderer content={msg.content || ''} />
         </div>
         {!isUser && msg.sources?.length > 0 && (
           <SourceAccordion sources={msg.sources} />
         )}
+      </div>
+    </div>
+  )
+}
+
+function PipelineStatus({ logs }) {
+  const logRef = useRef(null)
+  useEffect(() => {
+    if (logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight
+    }
+  }, [logs])
+
+  return (
+    <div className="pipeline-status">
+      <div className="pipeline-status__header">
+        <span className="spinner spinner--small" />
+        PIPELINE STATUS
+      </div>
+      <div className="pipeline-status__logs" ref={logRef}>
+        {logs.map((log, i) => (
+          <div key={i} className="pipeline-status__log-item">
+            <span className="pipeline-status__prompt">{'>'}</span> {log}
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -104,6 +129,7 @@ export default function App() {
   const [embedUrl, setEmbedUrl] = useState('')
   const [embedStatus, setEmbedStatus] = useState(null) // null | 'loading' | 'ok' | 'error'
   const [embedMsg, setEmbedMsg] = useState('')
+  const [ingestionLog, setIngestionLog] = useState([])
 
   // stats
   const [stats, setStats] = useState(null)
@@ -166,15 +192,18 @@ export default function App() {
 
   // ── send query ──────────────────────────────────────────────────────────────
   const handleSend = useCallback(async (forcedQuery = null) => {
-    const q = (forcedQuery || input).trim()
-    if (!q || loading) return
+    // If called via onClick={handleSend}, forcedQuery will be the event object.
+    // We only want to use it if it's explicitly passed as a string (e.g. from suggestions list).
+    const queryToProcess = (typeof forcedQuery === 'string' ? forcedQuery : input).trim()
+    if (!queryToProcess || loading) return
 
     // AI Suggestions flow
-    if (aiSuggestionsEnabled && !forcedQuery && suggestions.length === 0) {
+    const isForcedValue = typeof forcedQuery === 'string'
+    if (aiSuggestionsEnabled && !isForcedValue && suggestions.length === 0) {
       setIsFetchingSuggestions(true)
-      setOriginalInput(q)
+      setOriginalInput(queryToProcess)
       try {
-        const res = await fetchSuggestions(q)
+        const res = await fetchSuggestions(queryToProcess)
         if (res.suggestions?.length > 0) {
           setSuggestions(res.suggestions)
           return // Pause to show suggestions
@@ -188,14 +217,14 @@ export default function App() {
 
     // Normal query flow
     setSuggestions([])
-    const targetQuery = forcedQuery || q
+    const targetQuery = queryToProcess
 
     const userMsg = { id: Date.now(), role: 'user', content: targetQuery }
     const aiId = Date.now() + 1
-    const aiMsg = { id: aiId, role: 'assistant', content: '', streaming: true, sources: [] }
+    const aiMsg = { id: aiId, role: 'assistant', content: '', streaming: true, sources: [], isError: false }
 
     setMessages(prev => [...prev, userMsg, aiMsg])
-    if (!forcedQuery) setInput('')
+    if (!isForcedValue) setInput('')
     setLoading(true)
 
     try {
@@ -208,9 +237,19 @@ export default function App() {
           ))
         },
         onDone: ({ sources }) => {
-          setMessages(prev => prev.map(m =>
-            m.id === aiId ? { ...m, streaming: false, sources: sources ?? [] } : m
-          ))
+          setMessages(prev => prev.map(m => {
+            if (m.id === aiId) {
+              const isEmpty = !m.content || m.content.trim().length === 0
+              return { 
+                ...m, 
+                content: isEmpty ? "It didn't work" : m.content, 
+                streaming: false, 
+                sources: sources ?? [],
+                isError: isEmpty
+              }
+            }
+            return m
+          }))
           fetchStats().then(setStats).catch(() => { })
         },
       }
@@ -219,7 +258,7 @@ export default function App() {
     } catch (err) {
       setMessages(prev => prev.map(m =>
         m.id === aiId
-          ? { ...m, content: `⚠️ Error: ${err.message}`, streaming: false }
+          ? { ...m, content: `It didn't work: ${err.message}`, streaming: false, isError: true }
           : m
       ))
     } finally {
@@ -241,26 +280,39 @@ export default function App() {
     try { new URL(url) } catch { setEmbedStatus('error'); setEmbedMsg('Invalid URL'); return }
 
     setEmbedStatus('loading')
-    setEmbedMsg('Ingesting…')
+    setEmbedMsg('Initializing...')
+    setIngestionLog(['Starting ingestion pipeline...'])
 
     try {
-      const data = await ingestUrl(url)
-      setEmbedStatus('ok')
-      setEmbedMsg(data.message ?? 'Ingestion started ✓')
-      setEmbedUrl('')
-
-      // Refresh docs list after a short delay (ingestion is async)
-      setTimeout(() => {
-        Promise.all([queryDocuments(), querySources()])
-          .then(([d, s]) => { setDocs(d); setSources(s) })
+      await ingestUrl(url, {
+        onStatus: (status) => {
+          setIngestionLog(prev => [...prev.slice(-99), status])
+          setEmbedMsg(status)
+        },
+        onDone: (data) => {
+          setEmbedStatus('ok')
+          setEmbedMsg(data.message ?? 'Ingestion complete ✓')
+          setEmbedUrl('')
+          
+          Promise.all([queryDocuments(), querySources(), fetchStats()])
+          .then(([d, s, st]) => { 
+            setDocs(d); 
+            setSources(s); 
+            setStats(st) 
+          })
           .catch(() => { })
-      }, 3000)
+        }
+      })
     } catch (err) {
       setEmbedStatus('error')
       setEmbedMsg(err.message)
     }
 
-    setTimeout(() => setEmbedStatus(null), 5000)
+    setTimeout(() => {
+      if (embedStatus !== 'loading') {
+        setEmbedStatus(null)
+      }
+    }, 5000)
   }
 
   const hasScope = sources.length > 0
@@ -275,7 +327,7 @@ export default function App() {
         <div className="sidebar__header">
           <div className="logo">
             <span className="logo__icon">{'>_'}</span>
-            <span className="logo__text">DOCGPT</span>
+            <span className="logo__text">DOCGPT <span className="logo__beta">BETA</span></span>
           </div>
         </div>
 
@@ -326,6 +378,10 @@ export default function App() {
                   {embedStatus === 'loading' ? <span className="spinner" /> : 'Index'}
                 </button>
               </div>
+
+              {embedStatus === 'loading' && (
+                <PipelineStatus logs={ingestionLog} />
+              )}
 
               {embedStatus && embedStatus !== 'loading' && (
                 <div className={`toast toast--${embedStatus}`}>

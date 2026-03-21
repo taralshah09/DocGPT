@@ -78,17 +78,46 @@ export async function sendQueryStream(question, { topK = 5, source_id, docId, on
   }
 }
 
-export async function ingestUrl(url) {
+export async function ingestUrl(url, { onStatus, onDone } = {}) {
   const res = await fetch(`${BASE}/ingest`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ urls: [url] }),
   });
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error ?? "Ingest failed");
   }
-  return res.json();
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      try {
+        const payload = JSON.parse(line.slice(6));
+        if (payload.status) onStatus?.(payload.status);
+        if (payload.done) {
+          onDone?.(payload);
+          return payload;
+        }
+        if (payload.error) throw new Error(payload.error);
+      } catch (parseErr) {
+        if (parseErr instanceof SyntaxError) continue; // partial JSON maybe
+        console.warn("[ingestUrl] SSE error:", parseErr);
+      }
+    }
+  }
 }
 
 // ── get AI suggestions ────────────────────────────────────────────────────────

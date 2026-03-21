@@ -38,28 +38,33 @@ function sourceFromUrl(url) {
 
 const DEFAULT_BASE_URL = "https://react.dev";
 
-export async function runIngestion({ seedUrls } = {}) {
+export async function runIngestion({ seedUrls, onStatus } = {}) {
   const baseUrl = seedUrls?.length ? seedUrls[0] : DEFAULT_BASE_URL;
   const SOURCE = sourceFromUrl(baseUrl);
 
-  console.log(`  RAG Ingestion Pipeline (Iterative) — ${SOURCE.name}`);
+  const report = (msg) => {
+    console.log(msg);
+    if (onStatus) onStatus(msg);
+  };
+
+  report(`  RAG Ingestion Pipeline (Iterative) — ${SOURCE.name}`);
 
   await initDb();
   await ensureCollection();
   const actualId = await upsertSource(SOURCE);
   SOURCE.id = actualId;
 
-  console.log(`[pipeline] Step 1: Discovering URLs for ${baseUrl}...`);
-  const discovered = await discoverUrls(baseUrl);
+  report(`[pipeline] Step 1: Discovering URLs for ${baseUrl}...`);
+  const discovered = await discoverUrls(baseUrl, onStatus);
   const urls = [...new Set([...(seedUrls ?? []), ...discovered])].slice(0, MAX_PAGES);
 
   if (!urls.length) {
-    console.error("[pipeline] No URLs discovered. Aborting.");
+    report("[pipeline] No URLs discovered. Aborting.");
     return;
   }
 
-  console.log(`[pipeline] Found ${urls.length} URLs. Starting iterative processing…`);
-  console.log(`[pipeline] Strategy: Sequential process (Fetch → Store) to save memory.`);
+  report(`[pipeline] Found ${urls.length} URLs. Starting iterative processing…`);
+  report(`[pipeline] Strategy: Sequential process (Fetch → Store) to save memory.`);
 
   let successCount = 0;
   let skippedCount = 0;
@@ -79,7 +84,7 @@ export async function runIngestion({ seedUrls } = {}) {
       const { title, markdown } = extractMarkdown(html, url);
 
       if (markdown.trim().length < 100) {
-        console.log(`${progress} Skipping ${url} (too little content)`);
+        report(`${progress} Skipping ${url} (too little content)`);
         skippedCount++;
         continue;
       }
@@ -97,12 +102,12 @@ export async function runIngestion({ seedUrls } = {}) {
       });
 
       if (!changed) {
-        console.log(`${progress} Unchanged: ${url}`);
+        report(`${progress} Unchanged: ${url}`);
         skippedCount++;
         continue;
       }
 
-      console.log(`${progress} Processing: ${url} (${title})`);
+      report(`${progress} Processing: ${url} (${title})`);
 
       await deleteChunksByDocumentId(doc.doc_id);
 
@@ -121,7 +126,7 @@ export async function runIngestion({ seedUrls } = {}) {
 
     } catch (err) {
       errorCount++;
-      console.warn(`${progress} Error processing ${url}: ${err.message}`);
+      report(`${progress} Error processing ${url}: ${err.message}`);
     }
   }
 
@@ -129,11 +134,11 @@ export async function runIngestion({ seedUrls } = {}) {
   clearIdx();
   const stats = await getStats();
 
-  console.log("  Ingestion complete!");
-  console.log(`  Processed: ${successCount} new/updated`);
-  console.log(`  Skipped:   ${skippedCount} unchanged/tiny`);
-  console.log(`  Failed:    ${errorCount} errors`);
-  console.log(`  New Chunks: ${newChunksTotal}`);
+  report("  Ingestion complete!");
+  report(`  Processed: ${successCount} new/updated`);
+  report(`  Skipped:   ${skippedCount} unchanged/tiny`);
+  report(`  Failed:    ${errorCount} errors`);
+  report(`  New Chunks: ${newChunksTotal}`);
 
   return stats;
 }
