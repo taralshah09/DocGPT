@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_BACKEND_URL || "https://docgpt-gyo9.onrender.com";
+const BASE = import.meta.env.VITE_BACKEND_URL || "https://docgpt-90lx.onrender.com";
 
 export async function querySources() {
   const res = await fetch(`${BASE}/sources`);
