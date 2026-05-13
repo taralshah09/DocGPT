@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-const LLM_MODEL = "llama-3.3-70b-versatile";
+const LLM_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct";
 const MAX_CONTEXT = 3000;
 
 function buildPrompt(question, chunks) {
@@ -134,7 +134,7 @@ Example: { "suggestions": ["How to use useRef in React?", "When to use useRef vs
 
   try {
     const res = await client.chat.completions.create({
-      model: "llama-3.1-8b-instant",
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
       temperature: 0.7,
       max_tokens: 200,
       messages: [
@@ -146,7 +146,7 @@ Example: { "suggestions": ["How to use useRef in React?", "When to use useRef vs
 
     const content = res.choices[0].message.content;
     console.log("[generateSuggestions] LLM output:", content);
-    
+
     // Sometimes the model adds extra text even in JSON mode
     const startIdx = content.indexOf('{');
     const endIdx = content.lastIndexOf('}');
