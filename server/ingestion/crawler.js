@@ -1,7 +1,3 @@
-// ingestion/crawler.js
-// Crawls any documentation site: discovers URLs via sitemap → fetches each page's HTML
-// Returns: Array<{ url, html, fetchedAt }>
-
 import axios from "axios";
 import * as cheerio from "cheerio";
 import pLimit from "p-limit";
@@ -9,8 +5,6 @@ import pLimit from "p-limit";
 const CONCURRENCY  = parseInt(process.env.CRAWL_CONCURRENCY  ?? "3");
 const DELAY_MS     = parseInt(process.env.CRAWL_DELAY_MS     ?? "500");
 const MAX_PAGES    = parseInt(process.env.MAX_PAGES          ?? "200");
-
-// ─── helpers ────────────────────────────────────────────────────────────────
 
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
@@ -34,8 +28,6 @@ async function fetchHTML(url) {
   });
   return res.data;
 }
-
-// ─── URL discovery ───────────────────────────────────────────────────────────
 
 /**
  * Given a base URL, derive candidate sitemap locations and try each one.
@@ -180,8 +172,6 @@ async function discoverUrlsFromSeed(baseUrl) {
   console.log(`[crawler] Discovered ${found.length} URLs via BFS`);
   return found;
 }
-
-// ─── fetch pages ─────────────────────────────────────────────────────────────
 
 /**
  * Fetch HTML for every URL, respecting concurrency + delay.

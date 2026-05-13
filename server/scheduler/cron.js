@@ -1,10 +1,3 @@
-// scheduler/cron.js
-// Periodic re-ingestion using node-cron.
-// Import this module from api/main.js to activate it,
-// or run it as a standalone process.
-//
-// Default schedule: every day at 2am UTC
-
 import cron from "node-cron";
 import { runIngestion } from "../ingestion/pipeline.js";
 import { getAllSources } from "../db/client.js";
@@ -50,8 +43,6 @@ export function startScheduler() {
     timezone: "UTC",
   });
 }
-
-// ─── standalone entry point ───────────────────────────────────────────────────
 
 if (process.argv[1].endsWith("cron.js")) {
   import("dotenv/config").then(() => {

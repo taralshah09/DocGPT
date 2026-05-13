@@ -1,13 +1,3 @@
-// ingestion/crawler/strategies/bfs.js
-// Strategy 3: Breadth-first crawl starting from a seed URL.
-//
-// Two passes:
-//   a) Nav-sidebar scrape  — fast; extracts links from the doc sidebar/nav
-//   b) Full BFS            — slower; follows every qualifying <a href>
-//
-// Nav scraping alone often discovers 90%+ of a doc site's pages in a single
-// request if the sidebar is server-rendered (Next.js App Router, Docusaurus, etc.).
-
 import * as cheerio from "cheerio";
 import pLimit from "p-limit";
 import { fetchSafe, sleep } from "../fetcher.js";
@@ -16,7 +6,6 @@ const CONCURRENCY = parseInt(process.env.CRAWL_CONCURRENCY ?? "3");
 const DELAY_MS = parseInt(process.env.CRAWL_DELAY_MS ?? "400");
 const MAX_PAGES = parseInt(process.env.MAX_PAGES ?? "200");
 
-// ─── nav sidebar scrape (single request) ─────────────────────────────────────
 
 /**
  * Fetch the seed page and extract all hrefs from known nav/sidebar selectors.
@@ -56,8 +45,6 @@ export async function discoverViaNav(seedUrl, origin, config) {
     }
     return result;
 }
-
-// ─── full BFS crawl ───────────────────────────────────────────────────────────
 
 /**
  * Standard BFS starting from seedUrls, staying within origin + docPathPrefix.
@@ -109,8 +96,6 @@ export async function discoverViaBfs(seedUrls, origin, config) {
     console.log(`[bfs] BFS complete — found ${found.length} URLs`);
     return found;
 }
-
-// ─── helpers ─────────────────────────────────────────────────────────────────
 
 function resolveHref(href, origin) {
     if (!href || href.startsWith("mailto:") || href.startsWith("javascript:")) return null;

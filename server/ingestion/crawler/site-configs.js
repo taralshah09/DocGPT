@@ -1,15 +1,3 @@
-// ingestion/crawler/site-configs.js
-// Per-site configuration for known documentation portals.
-// The crawler resolves the best config by matching the crawl URL's hostname.
-//
-// Each entry may specify:
-//   sitemapPaths   – ordered list of sitemap URL paths to try (relative to origin)
-//   docPathPrefix  – only keep URLs whose pathname starts with this
-//   contentSelectors – CSS selectors (tried in order) to extract main content
-//   navSelectors   – CSS selectors for sidebar nav links (extra URL discovery)
-//   skipExtensions – file extensions to ignore during BFS
-//   headers        – extra request headers for this host
-
 /** @type {Record<string, SiteConfig>} */
 export const SITE_CONFIGS = {
     // ── Next.js ──────────────────────────────────────────────────────────────

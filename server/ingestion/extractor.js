@@ -1,11 +1,4 @@
-// ingestion/extractor.js
-// Converts raw HTML → clean Markdown-like text
-// Removes: nav, footer, sidebar, ads, scripts, styles
-// Extracts: h1–h3, paragraphs, code blocks, lists
-
 import * as cheerio from "cheerio";
-
-// ─── noise selectors to strip ────────────────────────────────────────────────
 
 const REMOVE_SELECTORS = [
   "nav", "header", "footer", "aside",
@@ -18,8 +11,6 @@ const REMOVE_SELECTORS = [
   ".toc-root", "article > nav", ".edit-link",
   "[data-sidebar]", ".sidebar-nav",
 ];
-
-// ─── main extractor ──────────────────────────────────────────────────────────
 
 /**
  * Convert HTML string to clean markdown text.

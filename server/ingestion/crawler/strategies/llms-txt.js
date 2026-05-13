@@ -1,10 +1,3 @@
-// ingestion/crawler/strategies/llms-txt.js
-// Strategy 2: Discover URLs via /llms.txt (a growing standard for AI-friendly docs).
-//
-// The llms.txt spec: https://llmstxt.org
-// Sites like Anthropic, many dev-tool companies publish these.
-// Format is Markdown with a list of links to canonical documentation pages.
-
 import * as cheerio from "cheerio";
 import { fetchSafe } from "../fetcher.js";
 
@@ -35,7 +28,6 @@ export async function discoverViaLlmsTxt(origin, config) {
     return [];
 }
 
-// ─── parsing ─────────────────────────────────────────────────────────────────
 
 function extractUrls(text, origin, config) {
     const urls = new Set();

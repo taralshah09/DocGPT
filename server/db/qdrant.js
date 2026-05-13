@@ -1,22 +1,7 @@
-// db/qdrant.js
-// All vector operations against a local Qdrant instance (http://localhost:6333).
-// Qdrant docs: https://qdrant.tech/documentation/
-//
-// Each point stored in Qdrant looks like:
-//   { id: <chunk UUID>, vector: [...], payload: { chunk_id, doc_id, source_id } }
-//
-// After a similarity search, pass the returned chunk IDs to
-// getChunksByIds() in client.js to hydrate the full metadata from Postgres.
-
 const QDRANT_URL = process.env.QDRANT_URL || "http://localhost:6333";
 const COLLECTION = process.env.QDRANT_COLLECTION || "chunks";
 
-// Dimensionality must match your embedding model.
-// BAAI/bge-small-en-v1.5 → 384
-// text-embedding-3-small → 1536
 const VECTOR_DIM = parseInt(process.env.QDRANT_VECTOR_DIM ?? "384", 10);
-
-// ─── helpers ──────────────────────────────────────────────────────────────────
 
 async function qdrantFetch(path, options = {}) {
     const headers = { "Content-Type": "application/json" };
@@ -37,8 +22,6 @@ async function qdrantFetch(path, options = {}) {
     return res.json();
 }
 
-// ─── collection lifecycle ─────────────────────────────────────────────────────
-
 /**
  * Create the Qdrant collection if it doesn't exist yet.
  * Safe to call on every startup (no-ops when already present).
@@ -57,7 +40,6 @@ export async function ensureCollection() {
             // Continue to ensure indexes exist
         }
     } catch (err) {
-        // Collection doesn't exist or error — proceed to create
         console.log(`[qdrant] Creating collection "${COLLECTION}" (dim=${VECTOR_DIM})...`);
         await qdrantFetch(`/collections/${COLLECTION}`, {
             method: "PUT",
@@ -88,8 +70,6 @@ export async function ensureCollection() {
 
     console.log(`[qdrant] Collection "${COLLECTION}" ready.`);
 }
-
-// ─── write ops ────────────────────────────────────────────────────────────────
 
 /**
  * Upsert chunk vectors into Qdrant.
@@ -131,8 +111,6 @@ export async function deleteChunksByDocumentId(documentId) {
         }),
     });
 }
-
-// ─── search ───────────────────────────────────────────────────────────────────
 
 /**
  * Vector similarity search in Qdrant.
@@ -188,7 +166,6 @@ export async function searchVectors(vector, { topK = 5, threshold = 0.7, source_
     }));
 }
 
-// ─── internal helpers ─────────────────────────────────────────────────────────
 
 function buildFilter({ source_id, docId } = {}) {
     const must = [];
@@ -198,8 +175,6 @@ function buildFilter({ source_id, docId } = {}) {
 
     return must.length ? { must } : null;
 }
-
-// ─── stats ────────────────────────────────────────────────────────────────────
 
 export async function getCollectionInfo() {
     const res = await qdrantFetch(`/collections/${COLLECTION}`);

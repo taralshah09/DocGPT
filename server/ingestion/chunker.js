@@ -1,13 +1,4 @@
-// ingestion/chunker.js
-// Heading-based chunking strategy:
-//   1. Split markdown at every heading (h1/h2/h3)
-//   2. If a section is too long (> MAX_TOKENS), split further by paragraphs
-//   3. If still too long, split by sliding window
-//
-// Each chunk is 200–500 tokens, self-contained.
 import { v4 as uuid } from "uuid";
-
-// ─── token counting (approximate — 1 token ≈ 4 chars for English) ────────────
 
 const APPROX_CHARS_PER_TOKEN = 4;
 
@@ -18,8 +9,6 @@ export function estimateTokens(text) {
 const MIN_TOKENS = 50;   // discard tiny slivers
 const MAX_TOKENS = 500;  // split sections larger than this
 const TARGET_TOKENS = 350; // aim for ~350 tokens per chunk
-
-// ─── heading splitter ─────────────────────────────────────────────────────────
 
 const HEADING_RE = /^#{1,4}\s.+$/m;
 
@@ -48,8 +37,6 @@ function splitByHeadings(md) {
   return sections.filter(s => s.trim().length > 0);
 }
 
-// ─── paragraph splitter ───────────────────────────────────────────────────────
-
 /**
  * Split a long section into paragraph-level chunks.
  * Keeps a "header breadcrumb" on every sub-chunk for context.
@@ -72,8 +59,6 @@ function splitByParagraphs(section, heading) {
   return chunks;
 }
 
-// ─── sliding-window fallback ──────────────────────────────────────────────────
-
 /**
  * Last resort: split by raw character windows with 20% overlap.
  */
@@ -91,8 +76,6 @@ function slidingWindowSplit(text, heading) {
   }
   return chunks;
 }
-
-// ─── public API ───────────────────────────────────────────────────────────────
 
 /**
  * Extract the first heading from a section, or null.

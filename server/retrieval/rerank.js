@@ -1,11 +1,6 @@
-// retrieval/rerank.js
-// Optional second-stage reranking.
-// Strategy: ask the LLM to score each candidate for relevance.
-// Only runs when RERANK=true env var is set (adds ~1 LLM call latency).
-
 import OpenAI from "openai";
 
-const RERANK_MODEL = "gpt-4o-mini"; // fast + cheap for scoring
+const RERANK_MODEL = "gpt-4o-mini";
 
 /**
  * Rerank search results using an LLM cross-encoder style prompt.
@@ -39,7 +34,7 @@ ${results.map((r, i) => `[${i}] ${r.content.slice(0, 300)}`).join("\n\n")}`;
     });
 
     const raw = res.choices[0].message.content;
-    const scores = JSON.parse(raw);          // e.g. [8, 3, 7, 9, 5]
+    const scores = JSON.parse(raw);
     const arr = Array.isArray(scores) ? scores : Object.values(scores);
 
     return results

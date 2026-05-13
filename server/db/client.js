@@ -1,7 +1,3 @@
-// db/client.js
-// PostgreSQL via `pg` — stores sources, documents, and chunks (metadata).
-// Vectors are stored in Qdrant (db/qdrant.js).
-
 import pg from "pg";
 import path from "path";
 import fs from "fs";
@@ -68,7 +64,6 @@ export async function initDb() {
   console.log("[db] Schema ready.");
 }
 
-// ─── source ops ───────────────────────────────────────────────────────────────
 
 export async function upsertSource({ id, name, base_url }) {
   const pool = getPool();
@@ -94,7 +89,6 @@ export async function getAllSources() {
   return res.rows;
 }
 
-// ─── document ops ─────────────────────────────────────────────────────────────
 
 export async function upsertDocument(doc) {
   const pool = getPool();
@@ -138,8 +132,6 @@ export async function getAllDocumentIds() {
   return res.rows.map(r => r.id);
 }
 
-// ─── chunk ops ────────────────────────────────────────────────────────────────
-
 /**
  * Bulk-insert chunks into Postgres (metadata ONLY, no embeddings).
  */
@@ -150,7 +142,6 @@ export async function insertChunks(chunks) {
   try {
     await client.query("BEGIN");
     for (const c of chunks) {
-      // Columns: id, document_id, content, heading, token_count
       await client.query(
         `INSERT INTO chunks (id, document_id, content, heading, token_count)
          VALUES ($1, $2, $3, $4, $5)
@@ -170,9 +161,6 @@ export async function insertChunks(chunks) {
   }
 }
 
-/**
- * Hydrate chunk + document metadata for a list of chunk UUIDs back from Qdrant.
- */
 export async function getChunksByIds(chunkIds) {
   if (!chunkIds.length) return [];
   const pool = getPool();
@@ -187,7 +175,6 @@ export async function getChunksByIds(chunkIds) {
   return res.rows;
 }
 
-// ─── stats ────────────────────────────────────────────────────────────────────
 
 export async function getStats() {
   const pool = getPool();

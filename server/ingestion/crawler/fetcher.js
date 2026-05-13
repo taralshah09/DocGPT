@@ -1,7 +1,3 @@
-// ingestion/crawler/fetcher.js
-// Centralised HTTP client with retry + exponential back-off.
-// All other crawler modules import from here — never from axios directly.
-
 import axios from "axios";
 
 const DEFAULT_TIMEOUT = parseInt(process.env.CRAWL_TIMEOUT_MS ?? "20000");
@@ -13,8 +9,6 @@ const BASE_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 };
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
-
 function sleep(ms) {
     return new Promise(r => setTimeout(r, ms));
 }
@@ -24,8 +18,6 @@ function isRetryable(err) {
     const s = err.response.status;
     return s === 429 || s === 503 || s === 502 || s === 504;
 }
-
-// ─── core fetch with retry ───────────────────────────────────────────────────
 
 /**
  * Fetch any URL with automatic retry on transient errors.

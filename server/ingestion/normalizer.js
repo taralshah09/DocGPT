@@ -1,7 +1,3 @@
-// ingestion/normalizer.js
-// Converts raw { url, title, markdown } → canonical Document object
-// Also computes a content_hash for change-detection.
-
 import { v5 as uuidv5 } from "uuid";
 import crypto from "crypto";
 
@@ -28,8 +24,6 @@ function contentHash(text) {
 function sourceName(url) {
   return new URL(url).hostname;
 }
-
-// ─── main ────────────────────────────────────────────────────────────────────
 
 /**
  * Normalize a single crawled page into a Document.
