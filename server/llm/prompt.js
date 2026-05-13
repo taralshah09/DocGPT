@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-const LLM_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct";
+const LLM_MODEL = "qwen/qwen3-32b";
 const MAX_CONTEXT = 3000;
 
 function buildPrompt(question, chunks) {
@@ -19,6 +19,7 @@ function buildPrompt(question, chunks) {
 Answer questions using ONLY the context provided below.
 If the context does not contain enough information, say so honestly.
 Always cite the relevant source URL when answering.
+Do NOT include any internal reasoning, <think> tags, or references like "Passage 1" in your final answer.
 Be concise, accurate, and developer-friendly.`;
 
   const user = `Context:
@@ -65,8 +66,25 @@ export async function generateAnswer(question, chunks, { onToken } = {}) {
     });
 
     let answer = "";
+    let isThinking = false;
     for await (const chunk of stream) {
       const token = chunk.choices[0]?.delta?.content ?? "";
+      
+      // Filter out <think> blocks in streaming mode
+      if (token.includes("<think>")) isThinking = true;
+      if (isThinking) {
+        if (token.includes("</think>")) {
+          isThinking = false;
+          // If there's content after </think> in the same token, keep it
+          const afterThink = token.split("</think>")[1] || "";
+          if (afterThink) {
+            answer += afterThink;
+            onToken(afterThink);
+          }
+        }
+        continue;
+      }
+
       answer += token;
       onToken(token);
     }
@@ -80,7 +98,12 @@ export async function generateAnswer(question, chunks, { onToken } = {}) {
         { role: "user", content: user },
       ],
     });
-    const answer = res.choices[0].message.content;
+    let answer = res.choices[0].message.content;
+    
+    // Remove <think> blocks and unwanted metadata
+    answer = answer.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    answer = answer.replace(/### Passage \d+/g, "").trim();
+
     return { answer, sources };
   }
 }
